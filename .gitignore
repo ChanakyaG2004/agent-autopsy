@@ -1,0 +1,29 @@
+# Local configuration and secrets
+.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# JavaScript / Next.js
+node_modules/
+.next/
+out/
+*.tsbuildinfo
+
+# Generated artifacts
+dist/
+build/
+coverage/
+*.log
+
+# macOS
+.DS_Store
