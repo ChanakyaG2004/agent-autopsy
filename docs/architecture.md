@@ -1,8 +1,8 @@
 # Architecture worksheet
 
-Status: Phase 0 exercise — answers pending.
+Status: Phase 0 learning notes — complete gradually after discussing examples.
 
-Write roughly 10–15 lines in your own words across the prompts below. Short, concrete explanations are enough. These answers will become the first architecture note after review.
+These prompts guide our discussions; they are not prerequisites for starting. Learn each concept through a concrete example, then record a short explanation in your own words. We will review the notes together as they develop.
 
 ## Purpose
 

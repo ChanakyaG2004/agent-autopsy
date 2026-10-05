@@ -1,0 +1,9 @@
+[project]
+name = "agent-autopsy-backend"
+version = "0.1.0"
+description = "API and execution services for Agent Autopsy"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi>=0.143.3",
+    "uvicorn[standard]>=0.54.0",
+]
