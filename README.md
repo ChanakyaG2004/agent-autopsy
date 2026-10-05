@@ -14,7 +14,7 @@ Run tool-using agents against versioned scenarios, inject API failures, and comp
 
 ## Current status
 
-First checkpoint: frontend and backend development scaffolding. Experiment creation, persistence, agent execution, fault injection, and Phoenix integration are not implemented yet.
+The frontend has its first introductory page, and the backend has its development scaffold. Experiment creation, persistence, agent execution, fault injection, and Phoenix integration are not implemented yet.
 
 Development proceeds in small, explained steps, with a focus on understanding each design decision before expanding the system.
 
@@ -30,4 +30,4 @@ See [frontend setup and first task](frontend/README.md) and [backend setup](back
 
 ## Next milestone
 
-Write and review the first page, then build a typed component and an experiment form. The first complete workflow will send an experiment request from the browser to FastAPI, validate it, and persist it in PostgreSQL. Use the [architecture worksheet](docs/architecture.md) to record understanding as we work through examples.
+Review the introductory page, then build a typed reusable component and an experiment form. The first complete workflow will send an experiment request from the browser to FastAPI, validate it, and persist it in PostgreSQL. Use the [architecture worksheet](docs/architecture.md) to record understanding as we work through examples.
