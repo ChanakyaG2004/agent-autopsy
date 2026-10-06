@@ -1,0 +1,165 @@
+"use client";
+
+import { useState, type FormEvent } from "react";
+
+type Scenario = "normal" | "timeout_after_commit" | "permission_denied";
+
+interface ExperimentDraft {
+  name: string;
+  agent_version: string;
+  scenarios: Scenario[];
+}
+
+type SubmissionState =
+  | { status: "idle" }
+  | { status: "submitting" }
+  | { status: "success"; message: string }
+  | { status: "error"; message: string };
+
+const scenarioOptions: { value: Scenario; label: string }[] = [
+  { value: "normal", label: "Normal execution" },
+  { value: "timeout_after_commit", label: "Response lost after refund commits" },
+  { value: "permission_denied", label: "Permission denied" },
+];
+
+const apiBaseUrl = (
+  process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://127.0.0.1:8000"
+).replace(/\/$/, "");
+
+export function ExperimentForm() {
+  const [name, setName] = useState("");
+  const [agentVersion, setAgentVersion] = useState("");
+  const [scenarios, setScenarios] = useState<Scenario[]>(["normal"]);
+  const [submission, setSubmission] = useState<SubmissionState>({ status: "idle" });
+  const isSubmitting = submission.status === "submitting";
+
+  function toggleScenario(scenario: Scenario) {
+    setScenarios((previous) =>
+      previous.includes(scenario)
+        ? previous.filter((value) => value !== scenario)
+        : [...previous, scenario],
+    );
+    setSubmission({ status: "idle" });
+  }
+
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (isSubmitting) return;
+    if (scenarios.length === 0) {
+      setSubmission({ status: "error", message: "Select at least one scenario." });
+      return;
+    }
+
+    setSubmission({ status: "submitting" });
+    const draft: ExperimentDraft = { name, agent_version: agentVersion, scenarios };
+
+    try {
+      const response = await fetch(`${apiBaseUrl}/experiments/validate`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(draft),
+        signal: AbortSignal.timeout(10_000),
+      });
+
+      if (!response.ok) {
+        setSubmission({
+          status: "error",
+          message:
+            response.status === 422
+              ? "Check your entries: the name needs 3–80 characters, the agent version needs 1–80, and at least one scenario must be selected. Spaces alone do not count."
+              : "The API could not validate this configuration. Try again.",
+        });
+        return;
+      }
+
+      const body: unknown = await response.json();
+      if (
+        typeof body !== "object" ||
+        body === null ||
+        !("message" in body) ||
+        typeof body.message !== "string"
+      ) {
+        setSubmission({ status: "error", message: "The API returned an unexpected response." });
+        return;
+      }
+
+      setSubmission({ status: "success", message: body.message });
+    } catch (error) {
+      setSubmission({
+        status: "error",
+        message:
+          error instanceof SyntaxError
+            ? "The API returned an unexpected response."
+            : error instanceof DOMException && error.name === "TimeoutError"
+            ? "The API did not respond within 10 seconds. Try again."
+            : "Could not reach the API. Check that the backend is running and try again.",
+      });
+    }
+  }
+
+  return (
+    <section className="experiment-section" aria-labelledby="experiment-heading">
+      <h2 id="experiment-heading">Plan an experiment</h2>
+      <p id="experiment-help">
+        Validate a configuration for a future experiment. These scenario choices
+        are planned; this check does not verify agent availability or execute tools.
+      </p>
+
+      <form onSubmit={handleSubmit} aria-busy={isSubmitting} aria-describedby="experiment-help">
+        <fieldset disabled={isSubmitting} className="form-fields">
+          <legend>Experiment configuration</legend>
+          <label htmlFor="experiment-name">Experiment name</label>
+          <input
+            id="experiment-name"
+            name="name"
+            value={name}
+            onChange={(event) => {
+              setName(event.target.value);
+              setSubmission({ status: "idle" });
+            }}
+            minLength={3}
+            maxLength={80}
+            required
+            placeholder="Refund recovery baseline"
+          />
+
+          <label htmlFor="agent-version">Agent version label</label>
+          <input
+            id="agent-version"
+            name="agent_version"
+            value={agentVersion}
+            onChange={(event) => {
+              setAgentVersion(event.target.value);
+              setSubmission({ status: "idle" });
+            }}
+            maxLength={80}
+            required
+            placeholder="refund-v1"
+          />
+
+          <fieldset className="scenario-fields">
+            <legend>Scenarios</legend>
+            {scenarioOptions.map((scenario) => (
+              <label key={scenario.value} className="checkbox-label">
+                <input
+                  type="checkbox"
+                  name="scenarios"
+                  value={scenario.value}
+                  checked={scenarios.includes(scenario.value)}
+                  onChange={() => toggleScenario(scenario.value)}
+                />
+                {scenario.label}
+              </label>
+            ))}
+          </fieldset>
+
+          <button type="submit">{isSubmitting ? "Validating…" : "Validate configuration"}</button>
+        </fieldset>
+
+        {submission.status === "submitting" && <p role="status">Checking configuration…</p>}
+        {submission.status === "error" && <p className="message error" role="alert">{submission.message}</p>}
+        {submission.status === "success" && <p className="message success" role="status">{submission.message}</p>}
+      </form>
+    </section>
+  );
+}

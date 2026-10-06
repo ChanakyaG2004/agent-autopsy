@@ -1,3 +1,6 @@
+import { EvidenceItem } from "@/components/evidence-item";
+import { ExperimentForm } from "@/components/experiment-form";
+
 export default function Home() {
   return (
     <main>
@@ -10,19 +13,21 @@ export default function Home() {
 
       <h2>Three kinds of execution evidence</h2>
       <ul>
-        <li>
-          <strong>Agent&apos;s claim:</strong> What the agent tells the user it
-          accomplished.
-        </li>
-        <li>
-          <strong>Executed tool actions:</strong> Which tool operations actually
-          ran, including retries and errors.
-        </li>
-        <li>
-          <strong>Actual state changes:</strong> What changed in the system, such
-          as the number and amounts of recorded refunds.
-        </li>
+        <EvidenceItem
+          title="Agent’s claim"
+          description="What the agent tells the user it accomplished."
+        />
+        <EvidenceItem
+          title="Executed tool actions"
+          description="Which tool operations actually ran, including retries and errors."
+        />
+        <EvidenceItem
+          title="Actual state changes"
+          description="What changed in the system, such as the number and amounts of recorded refunds."
+        />
       </ul>
+
+      <ExperimentForm />
     </main>
   );
 }

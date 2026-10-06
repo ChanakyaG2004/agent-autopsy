@@ -14,15 +14,15 @@ Run tool-using agents against versioned scenarios, inject API failures, and comp
 
 ## Current status
 
-The frontend has its first introductory page, and the backend has its development scaffold. Experiment creation, persistence, agent execution, fault injection, and Phoenix integration are not implemented yet.
+The frontend has an introductory page and an interactive experiment configuration form. The form calls FastAPI for runtime validation and displays loading, success, and error states. Experiment creation, persistence, agent execution, fault injection, and Phoenix integration are not implemented yet.
 
 Development proceeds in small, explained steps, with a focus on understanding each design decision before expanding the system.
 
 ## Repository layout
 
 ```text
-frontend/   Next.js App Router starter (React + TypeScript)
-backend/    FastAPI application entry point
+frontend/   Next.js page, typed components, and experiment form
+backend/    FastAPI configuration validation and request-boundary tests
 docs/       Architecture exercises and design decisions
 ```
 
@@ -30,4 +30,4 @@ See [frontend setup and first task](frontend/README.md) and [backend setup](back
 
 ## Next milestone
 
-Review the introductory page, then build a typed reusable component and an experiment form. The first complete workflow will send an experiment request from the browser to FastAPI, validate it, and persist it in PostgreSQL. Use the [architecture worksheet](docs/architecture.md) to record understanding as we work through examples.
+Review [the experiment validation walkthrough](docs/experiment-validation.md), then add PostgreSQL persistence and an experiment creation endpoint. Use the [architecture worksheet](docs/architecture.md) to record understanding as we work through examples.
