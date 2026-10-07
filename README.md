@@ -14,20 +14,20 @@ Run tool-using agents against versioned scenarios, inject API failures, and comp
 
 ## Current status
 
-The frontend has an introductory page and an interactive experiment configuration form. The form calls FastAPI for runtime validation and displays loading, success, and error states. Experiment creation, persistence, agent execution, fault injection, and Phoenix integration are not implemented yet.
+The frontend saves experiment drafts through FastAPI and lists recent records from PostgreSQL. The API validates configurations, persists drafts in a transaction, and supports bounded listing and retrieval by UUID. Alembic manages the schema. Agent execution, fault injection, and Phoenix integration are not implemented yet.
 
 Development proceeds in small, explained steps, with a focus on understanding each design decision before expanding the system.
 
 ## Repository layout
 
 ```text
-frontend/   Next.js page, typed components, and experiment form
-backend/    FastAPI configuration validation and request-boundary tests
+frontend/   Next.js page, typed components, draft form, and saved records
+backend/    FastAPI, SQLAlchemy models, Alembic migrations, and API tests
 docs/       Architecture exercises and design decisions
 ```
 
-See [frontend setup and first task](frontend/README.md) and [backend setup](backend/README.md) for commands and file explanations. Run the two development servers in separate terminals. PostgreSQL and Phoenix are not needed for this checkpoint.
+See [frontend setup](frontend/README.md) and [backend/PostgreSQL setup](backend/README.md) for commands and file explanations. Run the two development servers in separate terminals. PostgreSQL is needed for saving and reading experiments; Phoenix is introduced later.
 
 ## Next milestone
 
-Review [the experiment validation walkthrough](docs/experiment-validation.md), then add PostgreSQL persistence and an experiment creation endpoint. Use the [architecture worksheet](docs/architecture.md) to record understanding as we work through examples.
+Review [the persistence walkthrough](docs/experiment-persistence.md), then introduce the explicit agent loop and simulated order/refund tools. Use the [architecture worksheet](docs/architecture.md) to record understanding as we work through examples.

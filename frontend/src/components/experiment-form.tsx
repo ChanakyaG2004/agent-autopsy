@@ -2,13 +2,8 @@
 
 import { useState, type FormEvent } from "react";
 
-type Scenario = "normal" | "timeout_after_commit" | "permission_denied";
-
-interface ExperimentDraft {
-  name: string;
-  agent_version: string;
-  scenarios: Scenario[];
-}
+import { ExperimentList } from "@/components/experiment-list";
+import { apiBaseUrl, isSavedExperiment, type ExperimentDraft, type Scenario } from "@/lib/experiments";
 
 type SubmissionState =
   | { status: "idle" }
@@ -22,15 +17,12 @@ const scenarioOptions: { value: Scenario; label: string }[] = [
   { value: "permission_denied", label: "Permission denied" },
 ];
 
-const apiBaseUrl = (
-  process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://127.0.0.1:8000"
-).replace(/\/$/, "");
-
 export function ExperimentForm() {
   const [name, setName] = useState("");
   const [agentVersion, setAgentVersion] = useState("");
   const [scenarios, setScenarios] = useState<Scenario[]>(["normal"]);
   const [submission, setSubmission] = useState<SubmissionState>({ status: "idle" });
+  const [listRevision, setListRevision] = useState(0);
   const isSubmitting = submission.status === "submitting";
 
   function toggleScenario(scenario: Scenario) {
@@ -54,7 +46,7 @@ export function ExperimentForm() {
     const draft: ExperimentDraft = { name, agent_version: agentVersion, scenarios };
 
     try {
-      const response = await fetch(`${apiBaseUrl}/experiments/validate`, {
+      const response = await fetch(`${apiBaseUrl}/experiments`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(draft),
@@ -67,42 +59,38 @@ export function ExperimentForm() {
           message:
             response.status === 422
               ? "Check your entries: the name needs 3–80 characters, the agent version needs 1–80, and at least one scenario must be selected. Spaces alone do not count."
-              : "The API could not validate this configuration. Try again.",
+              : "Could not confirm that the experiment was saved. Refresh saved experiments before retrying.",
         });
         return;
       }
 
       const body: unknown = await response.json();
-      if (
-        typeof body !== "object" ||
-        body === null ||
-        !("message" in body) ||
-        typeof body.message !== "string"
-      ) {
-        setSubmission({ status: "error", message: "The API returned an unexpected response." });
+      if (!isSavedExperiment(body)) {
+        setSubmission({ status: "error", message: "The API returned an unexpected response. Refresh saved experiments to check whether the draft was saved." });
         return;
       }
 
-      setSubmission({ status: "success", message: body.message });
+      setSubmission({ status: "success", message: `Saved “${body.name}” as draft ${body.id}. No agent has been run.` });
+      setListRevision((previous) => previous + 1);
     } catch (error) {
       setSubmission({
         status: "error",
         message:
           error instanceof SyntaxError
-            ? "The API returned an unexpected response."
+            ? "The API returned an unexpected response. Refresh saved experiments before retrying."
             : error instanceof DOMException && error.name === "TimeoutError"
-            ? "The API did not respond within 10 seconds. Try again."
-            : "Could not reach the API. Check that the backend is running and try again.",
+            ? "The save request timed out. It may have succeeded. Refresh saved experiments before retrying."
+            : "Could not confirm the save. Check the backend, then refresh saved experiments before retrying.",
       });
     }
   }
 
   return (
     <section className="experiment-section" aria-labelledby="experiment-heading">
-      <h2 id="experiment-heading">Plan an experiment</h2>
+      <h2 id="experiment-heading">Create an experiment draft</h2>
       <p id="experiment-help">
-        Validate a configuration for a future experiment. These scenario choices
-        are planned; this check does not verify agent availability or execute tools.
+        Save a configuration for a future experiment. These scenario choices are
+        planned; saving does not verify agent availability or execute tools.
       </p>
 
       <form onSubmit={handleSubmit} aria-busy={isSubmitting} aria-describedby="experiment-help">
@@ -153,13 +141,14 @@ export function ExperimentForm() {
             ))}
           </fieldset>
 
-          <button type="submit">{isSubmitting ? "Validating…" : "Validate configuration"}</button>
+          <button type="submit">{isSubmitting ? "Saving…" : "Save experiment draft"}</button>
         </fieldset>
 
-        {submission.status === "submitting" && <p role="status">Checking configuration…</p>}
+        {submission.status === "submitting" && <p role="status">Saving experiment draft…</p>}
         {submission.status === "error" && <p className="message error" role="alert">{submission.message}</p>}
         {submission.status === "success" && <p className="message success" role="status">{submission.message}</p>}
       </form>
+      <ExperimentList revision={listRevision} />
     </section>
   );
 }

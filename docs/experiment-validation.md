@@ -1,5 +1,7 @@
 # Experiment configuration validation
 
+This note describes the earlier validation-only checkpoint. The endpoint remains available, while the current form now saves drafts through `POST /experiments`. See [persisted experiment drafts](experiment-persistence.md) for the current flow.
+
 This slice connects the browser to FastAPI. It validates a proposed configuration without saving data, checking that an agent exists, or executing a scenario.
 
 ## Request flow

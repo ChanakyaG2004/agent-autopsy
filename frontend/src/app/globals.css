@@ -75,3 +75,8 @@ input:focus-visible, button:focus-visible {
 
 .error { color: #991b1b; background: #fef2f2; }
 .success { color: #166534; background: #f0fdf4; }
+
+.saved-experiments { padding-left: 0; list-style: none; }
+.saved-experiments li { padding: 1rem; margin: 1rem 0; border: 1px solid #cbd5e1; border-radius: 0.5rem; }
+.saved-experiments p { margin: 0.5rem 0; }
+.saved-experiments code { overflow-wrap: anywhere; }

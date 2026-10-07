@@ -27,6 +27,8 @@ The root `.nvmrc` records the Node.js version used for setup. If you use nvm, ru
 - `src/app/globals.css`: global styles imported by the root layout.
 - `src/components/evidence-item.tsx`: reusable evidence list item with typed title and description props.
 - `src/components/experiment-form.tsx`: interactive configuration form, submission state, and a direct API request.
+- `src/components/experiment-list.tsx`: fetches and displays recent saved drafts with loading, empty, and error states.
+- `src/lib/experiments.ts`: shared frontend contracts, API URL, and response type guard.
 - `.env.example`: optional browser-visible API base URL; copy to `.env.local` to change the default and restart the frontend.
 - `package.json`: dependencies and commands such as `dev`, `build`, and `lint`.
 - `package-lock.json`: resolved dependency versions; `npm ci` installs these versions.
@@ -39,16 +41,17 @@ The root `.nvmrc` records the Node.js version used for setup. If you use nvm, ru
 
 ## Current learning checkpoint
 
-The first page is implemented and now uses typed evidence components and an interactive form. Start the backend using its README, then try:
+The page now saves drafts to PostgreSQL and loads them back through the API. Start PostgreSQL and the backend using the backend README, then try:
 
-1. Enter an experiment name and agent-version label, select scenarios, and validate.
+1. Enter an experiment name and agent-version label, select scenarios, and save a draft.
 2. Submit a name made of several spaces to see the backend reject it.
 3. Deselect every scenario to see the form's selection check.
 4. Stop the backend and submit again to see the network error state.
+5. Restart the backend, refresh the page, and verify the saved draft remains in the list.
 
-The page and evidence items are Server Components. Only `ExperimentForm` uses `"use client"`, because it has state and event handlers. Successful validation does not save or run an experiment.
+The page and evidence items are Server Components. `ExperimentForm` and `ExperimentList` use `"use client"` for state, events, and browser fetching. Saving a draft does not run an agent. Failed save responses can be ambiguous; refresh the list before retrying rather than assuming nothing was stored.
 
-Read [the validation walkthrough](../docs/experiment-validation.md) alongside the component code. The next step adds persistence after reviewing this request flow.
+Read [the persistence walkthrough](../docs/experiment-persistence.md) alongside the component code. The list displays up to 20 most recent drafts and refreshes after a save. The next step introduces actual agent execution after reviewing these data boundaries.
 
 ## Checks
 

@@ -4,8 +4,11 @@ version = "0.1.0"
 description = "API and execution services for Agent Autopsy"
 requires-python = ">=3.11"
 dependencies = [
+    "alembic>=1.20.0",
     "fastapi>=0.143.3",
+    "psycopg[binary]>=3.3.6",
     "pydantic>=2.14.1",
+    "sqlalchemy>=2.1.5",
     "uvicorn[standard]>=0.54.0",
 ]
 
