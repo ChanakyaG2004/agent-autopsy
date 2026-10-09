@@ -42,6 +42,7 @@ class AgentRun(Base):
     status: Mapped[str] = mapped_column(String(16))
     mode: Mapped[str] = mapped_column(String(16))
     model_name: Mapped[str | None] = mapped_column(String(200))
+    trace_id: Mapped[str | None] = mapped_column(String(32))
     task: Mapped[str] = mapped_column(Text)
     output: Mapped[str | None] = mapped_column(Text)
     error: Mapped[str | None] = mapped_column(Text)

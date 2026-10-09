@@ -4,6 +4,7 @@ export interface AgentRun {
   status: "running" | "completed" | "failed";
   mode: "demo" | "openai";
   model_name: string | null;
+  trace_id: string | null;
   task: string;
   output: string | null;
   error: string | null;
@@ -21,6 +22,12 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const isDate = (value: unknown) => typeof value === "string" && Number.isFinite(Date.parse(value));
 
+const phoenixBaseUrl = (process.env.NEXT_PUBLIC_PHOENIX_BASE_URL ?? "http://127.0.0.1:6006").replace(/\/$/, "");
+
+export function phoenixTraceUrl(traceId: string): string {
+  return `${phoenixBaseUrl}/redirects/traces/${encodeURIComponent(traceId)}`;
+}
+
 export function isAgentRun(value: unknown): value is AgentRun {
   if (!isRecord(value)) return false;
   return typeof value.id === "string" && uuid.test(value.id) &&
@@ -28,6 +35,7 @@ export function isAgentRun(value: unknown): value is AgentRun {
     ["running", "completed", "failed"].includes(String(value.status)) &&
     (value.mode === "demo" || value.mode === "openai") &&
     (value.model_name === null || typeof value.model_name === "string") &&
+    (value.trace_id === null || (typeof value.trace_id === "string" && /^[0-9a-f]{32}$/.test(value.trace_id))) &&
     typeof value.task === "string" &&
     (value.output === null || typeof value.output === "string") &&
     (value.error === null || typeof value.error === "string") &&

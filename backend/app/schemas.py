@@ -46,6 +46,7 @@ class RunRead(BaseModel):
     status: Literal["running", "completed", "failed"]
     mode: Literal["demo", "openai"]
     model_name: str | None
+    trace_id: str | None
     task: str
     output: str | None
     error: str | None

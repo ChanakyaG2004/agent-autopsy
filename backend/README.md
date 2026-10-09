@@ -2,6 +2,8 @@
 
 The FastAPI application validates configurations, saves experiments, and executes `refund-v1` with only the `normal` scenario against simulated tools. Run records are stored in PostgreSQL. The default driver is a deterministic demo, not an LLM.
 
+Tracing is opt-in. See [Phoenix tracing setup and design](../docs/phoenix-tracing.md) to start the local collector, enable export, and inspect normal/error traces. Application PostgreSQL remains independent of Phoenix's local trace store.
+
 This application will own request validation, application data, agent execution, benchmark execution, and evaluation. The agent runner will remain separate from HTTP handlers so a local command and, eventually, a worker can invoke the same logic.
 
 Application PostgreSQL will store benchmark definitions and experiment results. Phoenix will receive execution telemetry. Results will reference their traces by ID.
@@ -48,12 +50,16 @@ Optional real model mode uses `OPENAI_API_KEY` and `OPENAI_MODEL` in the backend
 - `app/tools.py`: allowlisted tool schemas, strict argument validation, isolated refund state.
 - `app/providers.py`: optional OpenAI Responses adapter and environment configuration.
 - `app/execution.py`: atomic run claim, short database transactions, execution orchestration.
+- `app/telemetry.py`: owned tracer provider, OpenInference span attributes, bounded background OTLP/HTTP export, and lifecycle shutdown.
 - `app/schemas.py`: typed HTTP request and response contracts.
 - `alembic.ini` and `migrations/`: explicit versioned database schema changes.
 - `scripts/start-postgres.sh`: local-only native PostgreSQL bootstrap.
+- `scripts/start-phoenix.sh` and `scripts/phoenix_http.py`: optional local Phoenix service with persistent ignored storage and only an HTTP listener.
+- `scripts/trace_failure.py`: explicitly tagged rejected-tool diagnostic, without application database writes.
 - `tests/test_experiment_validation.py`: checks the request boundary, including invalid values and local browser access.
 - `tests/test_experiment_persistence.py`: real PostgreSQL integration tests, with a separate test database and rolled-back transactions.
 - `tests/test_agent.py`: runner limits, tool safety, state evidence, and mocked provider behavior.
+- `tests/test_telemetry.py`: trace hierarchy, model/demo distinction, selected attribute capture, and exporter failure isolation.
 
 FastAPI defines request handling. Uvicorn is the HTTP server that receives connections and invokes the application. The `--reload` flag restarts the development server when Python files change; `--reload-dir app` limits watching to source files so dependency installs do not trigger restarts.
 

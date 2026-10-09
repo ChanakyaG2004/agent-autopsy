@@ -153,6 +153,7 @@ def test_run_is_persisted_and_experiment_changes_status(client):
     run = response.json()
     assert run["status"] == "completed" and run["mode"] == "demo"
     assert run["model_name"] is None
+    assert run["trace_id"] is None
     assert run["final_state"]["refunded_cents"] == 4900
     assert run["finished_at"] is not None
     assert client.get(path).json() == [run]
@@ -256,3 +257,36 @@ def test_atomic_claim_blocks_a_second_run(test_engine, monkeypatch):
         with test_engine.begin() as connection:
             connection.execute(delete(AgentRun).where(AgentRun.experiment_id == experiment_id))
             connection.execute(delete(Experiment).where(Experiment.id == experiment_id))
+
+
+@pytest.mark.parametrize("failed", [False, True])
+def test_trace_id_links_saved_run_to_root_span(client, monkeypatch, failed):
+    from opentelemetry.sdk.trace import TracerProvider
+    from opentelemetry.sdk.trace.export import SimpleSpanProcessor
+    from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
+    from app import telemetry
+    from app.agent import ModelTurn, ToolCall
+    from opentelemetry.trace import StatusCode
+
+    exporter = InMemorySpanExporter()
+    provider = TracerProvider(shutdown_on_exit=False)
+    provider.add_span_processor(SimpleSpanProcessor(exporter))
+    monkeypatch.setattr(telemetry, "_provider", provider)
+    if failed:
+        class RejectedDriver:
+            def decide(self, history):
+                return ModelTurn([], [ToolCall("unregistered", {}, "test-call")])
+        monkeypatch.setattr("app.execution.make_driver", lambda mode: (RejectedDriver(), None))
+    try:
+        experiment = client.post("/experiments", json=draft("Traced refund")).json()
+        path = f'/experiments/{experiment["id"]}/runs'
+        run = client.post(path, json={}).json()
+        root = next(item for item in exporter.get_finished_spans() if item.name == "agent.run")
+        assert run["trace_id"] == f"{root.context.trace_id:032x}"
+        assert root.attributes["agent.run_id"] == run["id"]
+        assert root.attributes["agent.experiment_id"] == experiment["id"]
+        assert root.status.status_code == (StatusCode.ERROR if failed else StatusCode.OK)
+        assert run["status"] == ("failed" if failed else "completed")
+        assert client.get(path).json()[0]["trace_id"] == run["trace_id"]
+    finally:
+        provider.shutdown()

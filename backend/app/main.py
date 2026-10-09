@@ -1,4 +1,5 @@
 import logging
+from contextlib import asynccontextmanager
 from typing import Annotated
 from uuid import UUID
 
@@ -13,10 +14,20 @@ from app.database import get_session
 from app.models import AgentRun, Experiment
 from app.schemas import ExperimentDraft, ExperimentRead, ExperimentValidation, RunRead, RunRequest
 from app.execution import start_run
+from app.telemetry import configure_tracing, shutdown_tracing
 
 logger = logging.getLogger(__name__)
 
-app = FastAPI(title="Agent Autopsy API", version="0.1.0")
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    provider = configure_tracing()
+    try:
+        yield
+    finally:
+        shutdown_tracing(provider)
+
+
+app = FastAPI(title="Agent Autopsy API", version="0.1.0", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,

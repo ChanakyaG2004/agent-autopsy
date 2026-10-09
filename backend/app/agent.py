@@ -6,6 +6,7 @@ from dataclasses import dataclass, field
 from typing import Any, Protocol
 
 from app.tools import RefundSandbox, ToolError
+from app.telemetry import set_json, span
 
 TASK = "Refund the full paid amount for order-123, then report what happened."
 INSTRUCTIONS = (
@@ -57,7 +58,13 @@ def execute_agent(driver: Driver) -> RunResult:
     error = None
     try:
         for turn_number in range(1, MAX_TURNS + 1):
-            turn = driver.decide(history)
+            with span("agent.decision", "CHAIN", **{"agent.turn": turn_number}) as decision:
+                turn = driver.decide(history)
+                decision.set_attribute("agent.requested_tools", [
+                    call.name if call.name in {"get_order", "issue_refund"} else "unregistered"
+                    for call in turn.calls
+                ])
+                decision.set_attribute("agent.has_final_answer", bool(turn.answer.strip()))
             history.extend(turn.output_items)
             if len(turn.calls) > 1:
                 raise AgentError("Model returned multiple tool calls; execution refused.")
@@ -67,7 +74,19 @@ def execute_agent(driver: Driver) -> RunResult:
                         "arguments": call.arguments}
                 steps.append(step)
                 try:
-                    result = sandbox.execute(call.name, call.arguments)
+                    with span("tool.execute", "TOOL", **{
+                        "tool.name": call.name if call.name in {"get_order", "issue_refund"} else "unregistered",
+                        "agent.turn": turn_number,
+                    }) as tool_span:
+                        tool_span.set_attribute("agent.argument_count", len(call.arguments))
+                        result = sandbox.execute(call.name, call.arguments)
+                        # Successful execution establishes strict types, scope, and no extra fields.
+                        set_json(tool_span, "input", call.arguments)
+                        set_json(tool_span, "output", {
+                            "order_id": result["order_id"],
+                            "refunded_cents": result["refunded_cents"],
+                            "refund_count": len(result["refunds"]),
+                        })
                 except ToolError as exc:
                     step["error"] = str(exc)
                     raise AgentError(str(exc)) from None

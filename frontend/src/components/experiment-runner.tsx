@@ -2,7 +2,7 @@
 
 import { useId, useState } from "react";
 import { apiBaseUrl, type SavedExperiment } from "@/lib/experiments";
-import { isAgentRun, type AgentRun } from "@/lib/runs";
+import { isAgentRun, phoenixTraceUrl, type AgentRun } from "@/lib/runs";
 
 export function ExperimentRunner({ experiment }: { experiment: SavedExperiment }) {
   const selectId = useId();
@@ -88,6 +88,15 @@ export function ExperimentRunner({ experiment }: { experiment: SavedExperiment }
         <article className="run-result" key={saved.id}>
           <h3>{saved.mode === "demo" ? "Deterministic demo (no LLM)" : `OpenAI · ${saved.model_name}`} · {saved.status}</h3>
           <p>{new Date(saved.started_at).toLocaleString()} · <code>{saved.id}</code></p>
+          {saved.trace_id ? (
+            <p>
+              <a href={phoenixTraceUrl(saved.trace_id)} target="_blank" rel="noopener noreferrer">Open trace in Phoenix</a>
+              {" · "}<code>{saved.trace_id}</code>
+              <br />Export runs in the background. The trace may take a moment to appear; Phoenix must be running.
+            </p>
+          ) : <p>{saved.status === "running"
+            ? "The trace link is saved when execution finishes. Refresh run history to check its outcome."
+            : "No trace captured for this run. Enable backend tracing and run again to capture one."}</p>}
           <p><strong>Task:</strong> {saved.task}</p>
           <p><strong>Agent’s claim:</strong> {saved.output ?? "No final answer recorded."}</p>
           {saved.error && <p className="message error">{saved.error}</p>}

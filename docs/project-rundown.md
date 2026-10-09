@@ -1,5 +1,7 @@
 # Agent Autopsy: project rundown after the agent-runner milestone
 
+Historical checkpoint: Phoenix tracing has since been implemented. Read [the tracing milestone](phoenix-tracing.md) for the current telemetry architecture and setup; the sections below preserve what existed at the agent-runner checkpoint.
+
 ## Purpose and scope
 
 Agent Autopsy is a reliability testing platform for AI agents that take actions. Its central question is: **does the agent's report agree with the actions that executed and the resulting business state?** The long-term goal is to compare agent versions under reproducible normal, faulty, and adversarial conditions, using Arize Phoenix to investigate failures.

@@ -5,6 +5,7 @@ from openai import APIError, OpenAI
 
 from app.agent import AgentError, DemoDriver, INSTRUCTIONS, ModelTurn, ToolCall
 from app.tools import TOOL_SCHEMAS
+from app.telemetry import span
 
 
 class ProviderNotConfigured(Exception):
@@ -17,6 +18,12 @@ class OpenAIDriver:
         self.client = OpenAI(api_key=api_key, timeout=10.0, max_retries=0)
 
     def decide(self, history: list[dict]) -> ModelTurn:
+        with span("openai.responses", "LLM", **{
+            "llm.system": "openai", "llm.model_name": self.model,
+        }):
+            return self._request(history)
+
+    def _request(self, history: list[dict]) -> ModelTurn:
         try:
             response = self.client.responses.create(
                 model=self.model, instructions=INSTRUCTIONS, input=history,
