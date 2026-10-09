@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 
 import { apiBaseUrl, isSavedExperiment, type SavedExperiment } from "@/lib/experiments";
+import { ExperimentRunner } from "@/components/experiment-runner";
 
 type ListState =
   | { status: "loading" }
@@ -68,7 +69,7 @@ export function ExperimentList({ revision }: ExperimentListProps) {
   return (
     <section className="experiment-section" aria-labelledby="saved-heading">
       <h2 id="saved-heading">Saved experiments</h2>
-      <p>Most recent 20 drafts. Saving a draft does not run an agent.</p>
+      <p>Most recent 20 experiments. Saving a draft does not run an agent.</p>
       <button type="button" onClick={() => setRetry((previous) => previous + 1)}>
         Refresh saved experiments
       </button>
@@ -85,6 +86,7 @@ export function ExperimentList({ revision }: ExperimentListProps) {
               <p>{experiment.agent_version} · {experiment.scenarios.length} scenario(s) · {experiment.status}</p>
               <p>Created {new Date(experiment.created_at).toLocaleString()}</p>
               <code>{experiment.id}</code>
+              <ExperimentRunner experiment={experiment} />
             </li>
           ))}
         </ul>

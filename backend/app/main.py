@@ -10,8 +10,9 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from app.database import get_session
-from app.models import Experiment
-from app.schemas import ExperimentDraft, ExperimentRead, ExperimentValidation
+from app.models import AgentRun, Experiment
+from app.schemas import ExperimentDraft, ExperimentRead, ExperimentValidation, RunRead, RunRequest
+from app.execution import start_run
 
 logger = logging.getLogger(__name__)
 
@@ -77,3 +78,19 @@ def get_experiment(experiment_id: UUID, session: DatabaseSession) -> Experiment:
     if experiment is None:
         raise HTTPException(status_code=404, detail="Experiment not found")
     return experiment
+
+
+@app.post("/experiments/{experiment_id}/runs", response_model=RunRead, status_code=201)
+def run_experiment(experiment_id: UUID, request: RunRequest, session: DatabaseSession) -> AgentRun:
+    return start_run(experiment_id, request.mode, session)
+
+
+@app.get("/experiments/{experiment_id}/runs", response_model=list[RunRead])
+def list_runs(
+    experiment_id: UUID, session: DatabaseSession,
+    limit: Annotated[int, Query(ge=1, le=20)] = 10,
+) -> list[AgentRun]:
+    if session.get(Experiment, experiment_id) is None:
+        raise HTTPException(404, "Experiment not found")
+    return list(session.scalars(select(AgentRun).where(AgentRun.experiment_id == experiment_id)
+                               .order_by(AgentRun.started_at.desc(), AgentRun.id.desc()).limit(limit)))

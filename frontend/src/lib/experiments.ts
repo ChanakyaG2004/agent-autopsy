@@ -8,7 +8,7 @@ export interface ExperimentDraft {
 
 export interface SavedExperiment extends ExperimentDraft {
   id: string;
-  status: "draft";
+  status: "draft" | "running" | "completed" | "failed";
   created_at: string;
 }
 
@@ -23,7 +23,7 @@ export function isSavedExperiment(value: unknown): value is SavedExperiment {
     /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value.id) &&
     "name" in value && typeof value.name === "string" &&
     "agent_version" in value && typeof value.agent_version === "string" &&
-    "status" in value && value.status === "draft" &&
+    "status" in value && ["draft", "running", "completed", "failed"].includes(String(value.status)) &&
     "created_at" in value && typeof value.created_at === "string" &&
     Number.isFinite(Date.parse(value.created_at)) &&
     "scenarios" in value && Array.isArray(value.scenarios) &&

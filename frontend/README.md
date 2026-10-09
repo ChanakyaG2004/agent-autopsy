@@ -27,7 +27,9 @@ The root `.nvmrc` records the Node.js version used for setup. If you use nvm, ru
 - `src/app/globals.css`: global styles imported by the root layout.
 - `src/components/evidence-item.tsx`: reusable evidence list item with typed title and description props.
 - `src/components/experiment-form.tsx`: interactive configuration form, submission state, and a direct API request.
-- `src/components/experiment-list.tsx`: fetches and displays recent saved drafts with loading, empty, and error states.
+- `src/components/experiment-list.tsx`: fetches and displays recent saved experiments with loading, empty, and error states.
+- `src/components/experiment-runner.tsx`: execution driver selection, explicit run action, saved run history and evidence inspection.
+- `src/lib/runs.ts`: run response contract and runtime response validation.
 - `src/lib/experiments.ts`: shared frontend contracts, API URL, and response type guard.
 - `.env.example`: optional browser-visible API base URL; copy to `.env.local` to change the default and restart the frontend.
 - `package.json`: dependencies and commands such as `dev`, `build`, and `lint`.
@@ -41,17 +43,19 @@ The root `.nvmrc` records the Node.js version used for setup. If you use nvm, ru
 
 ## Current learning checkpoint
 
-The page now saves drafts to PostgreSQL and loads them back through the API. Start PostgreSQL and the backend using the backend README, then try:
+The page saves drafts and executes the supported normal refund scenario. Start PostgreSQL and the backend using the backend README, then try:
 
 1. Enter an experiment name and agent-version label, select scenarios, and save a draft.
 2. Submit a name made of several spaces to see the backend reject it.
 3. Deselect every scenario to see the form's selection check.
 4. Stop the backend and submit again to see the network error state.
 5. Restart the backend, refresh the page, and verify the saved draft remains in the list.
+6. Save a draft with `refund-v1` and only Normal execution selected. Open its run panel and use the deterministic demo.
+7. Inspect the tool steps and state snapshots. Reload, reopen the panel, and click Refresh run history to retrieve the saved result.
 
-The page and evidence items are Server Components. `ExperimentForm` and `ExperimentList` use `"use client"` for state, events, and browser fetching. Saving a draft does not run an agent. Failed save responses can be ambiguous; refresh the list before retrying rather than assuming nothing was stored.
+The page and evidence items are Server Components. `ExperimentForm`, `ExperimentList`, and `ExperimentRunner` use `"use client"` for state, events, and browser fetching. Saving a draft does not run an agent. Failed save or execution responses can be ambiguous; refresh the relevant history before retrying rather than assuming nothing was stored. The run request waits up to 90 seconds in the browser; aborting that wait does not cancel backend execution.
 
-Read [the persistence walkthrough](../docs/experiment-persistence.md) alongside the component code. The list displays up to 20 most recent drafts and refreshes after a save. The next step introduces actual agent execution after reviewing these data boundaries.
+Read [the persistence walkthrough](../docs/experiment-persistence.md) and [execution walkthrough](../docs/agent-execution.md) alongside the component code. The list displays up to 20 experiments and refreshes after a save. Run panels retrieve the latest 10 runs on demand. Refresh saved experiments to update the experiment status after running.
 
 ## Checks
 

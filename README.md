@@ -14,15 +14,15 @@ Run tool-using agents against versioned scenarios, inject API failures, and comp
 
 ## Current status
 
-The frontend saves experiment drafts through FastAPI and lists recent records from PostgreSQL. The API validates configurations, persists drafts in a transaction, and supports bounded listing and retrieval by UUID. Alembic manages the schema. Agent execution, fault injection, and Phoenix integration are not implemented yet.
+The frontend saves experiment drafts through FastAPI and lists recent records from PostgreSQL. A `refund-v1` experiment with only `normal` selected can execute a bounded tool loop against an isolated simulated order. Runs persist the agent's answer, tool actions, and before/after state. The default deterministic demo needs no model key and is explicitly not an LLM benchmark. An optional OpenAI Responses adapter requires backend configuration; it has mocked tests but has not been verified against a live model. Alembic manages the schema. Fault injection, automated evaluations, and Phoenix integration are not implemented yet.
 
 Development proceeds in small, explained steps, with a focus on understanding each design decision before expanding the system.
 
 ## Repository layout
 
 ```text
-frontend/   Next.js page, typed components, draft form, and saved records
-backend/    FastAPI, SQLAlchemy models, Alembic migrations, and API tests
+frontend/   Next.js page, typed components, draft form, and saved run inspection
+backend/    FastAPI, PostgreSQL, explicit agent loop, simulated tools, and tests
 docs/       Architecture exercises and design decisions
 ```
 
@@ -30,4 +30,4 @@ See [frontend setup](frontend/README.md) and [backend/PostgreSQL setup](backend/
 
 ## Next milestone
 
-Review [the persistence walkthrough](docs/experiment-persistence.md), then introduce the explicit agent loop and simulated order/refund tools. Use the [architecture worksheet](docs/architecture.md) to record understanding as we work through examples.
+Read the [complete project rundown](docs/project-rundown.md) and [agent execution walkthrough](docs/agent-execution.md), then instrument this loop with Phoenix/OpenTelemetry/OpenInference. The next behavior milestone is fault injection with deterministic state-based evaluation. Use the [architecture worksheet](docs/architecture.md) to record understanding as we work through examples.

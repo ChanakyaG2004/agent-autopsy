@@ -1,6 +1,6 @@
 # Backend
 
-The FastAPI application validates configurations and saves experiment drafts in PostgreSQL. Execution is not implemented yet.
+The FastAPI application validates configurations, saves experiments, and executes `refund-v1` with only the `normal` scenario against simulated tools. Run records are stored in PostgreSQL. The default driver is a deterministic demo, not an LLM.
 
 This application will own request validation, application data, agent execution, benchmark execution, and evaluation. The agent runner will remain separate from HTTP handlers so a local command and, eventually, a worker can invoke the same logic.
 
@@ -31,7 +31,9 @@ Use Python 3.11 or newer. `uv sync` creates a project-local `.venv` and installs
 
 `.env.example` documents the development and test database URLs. To use an existing PostgreSQL service, create dedicated databases and set those URLs in `.env` instead of running the bootstrap. Environment files are ignored by Git. The application also has the example development URL as a local default.
 
-Open http://127.0.0.1:8000/docs. `POST /experiments` returns 201 with a persisted draft, `GET /experiments` lists a bounded page, and `GET /experiments/{id}` retrieves one record. The validation-only endpoint remains available. Nothing executes an agent yet. A request to `/` returns 404.
+Open http://127.0.0.1:8000/docs. `POST /experiments` returns 201 with a persisted draft, `GET /experiments` lists a bounded page, and `GET /experiments/{id}` retrieves one record. `POST /experiments/{id}/runs` accepts `{"mode":"demo"}` (or configured `"openai"`) and synchronously executes a run. `GET /experiments/{id}/runs` returns the latest 10 runs, with `limit` bounded at 20. A created run returns 201 even when its execution status is `failed`; inspect the body. The validation-only endpoint remains available. A request to `/` returns 404.
+
+Optional real model mode uses `OPENAI_API_KEY` and `OPENAI_MODEL` in the backend environment. Choose a model that supports Responses function calling. Do not put the key in frontend environment variables. Real model requests can incur provider charges. No key is needed for the demo. The OpenAI adapter is tested with mocked SDK responses; live model behavior is not yet verified.
 
 ## Files
 
@@ -41,12 +43,17 @@ Open http://127.0.0.1:8000/docs. `POST /experiments` returns 201 with a persiste
 - `app/__init__.py`: marks `app` as a Python package.
 - `app/main.py`: creates the FastAPI application. Uvicorn loads the `app` object from this module.
 - `app/database.py`: connection pool, declarative base, and request-scoped sessions.
-- `app/models.py`: experiments table mapping, constraints, and creation-time index.
+- `app/models.py`: experiments and agent_runs table mappings, foreign key, constraints, and indexes.
+- `app/agent.py`: driver protocol, bounded explicit loop, deterministic demo.
+- `app/tools.py`: allowlisted tool schemas, strict argument validation, isolated refund state.
+- `app/providers.py`: optional OpenAI Responses adapter and environment configuration.
+- `app/execution.py`: atomic run claim, short database transactions, execution orchestration.
 - `app/schemas.py`: typed HTTP request and response contracts.
 - `alembic.ini` and `migrations/`: explicit versioned database schema changes.
 - `scripts/start-postgres.sh`: local-only native PostgreSQL bootstrap.
 - `tests/test_experiment_validation.py`: checks the request boundary, including invalid values and local browser access.
 - `tests/test_experiment_persistence.py`: real PostgreSQL integration tests, with a separate test database and rolled-back transactions.
+- `tests/test_agent.py`: runner limits, tool safety, state evidence, and mocked provider behavior.
 
 FastAPI defines request handling. Uvicorn is the HTTP server that receives connections and invokes the application. The `--reload` flag restarts the development server when Python files change; `--reload-dir app` limits watching to source files so dependency installs do not trigger restarts.
 
@@ -57,7 +64,7 @@ uv run --env-file .env pytest
 uv run --env-file .env alembic check
 ```
 
-The PostgreSQL service and dedicated `_test` database must be available for persistence tests. Migration setup is automatic in the tests; each case rolls back its own data. No SQLite substitution is used.
+The PostgreSQL service and dedicated `_test` database must be available for persistence tests. Migration setup is automatic. Most cases roll back their data; the two-connection concurrency test commits its fixture and explicitly cleans it up. No SQLite substitution is used.
 
 To stop only this local cluster, from the repository root:
 
@@ -66,3 +73,4 @@ To stop only this local cluster, from the repository root:
 ```
 
 See [the persistence walkthrough](../docs/experiment-persistence.md) for transactions, schema decisions, failure semantics, and migrations.
+See [the execution walkthrough](../docs/agent-execution.md) for run lifecycle, provider boundaries, and crash limitations.

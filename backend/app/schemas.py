@@ -30,5 +30,27 @@ class ExperimentRead(ExperimentDraft):
     model_config = ConfigDict(from_attributes=True)
 
     id: UUID
-    status: Literal["draft"]
+    status: Literal["draft", "running", "completed", "failed"]
     created_at: datetime
+
+
+class RunRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    mode: Literal["demo", "openai"] = "demo"
+
+
+class RunRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: UUID
+    experiment_id: UUID
+    status: Literal["running", "completed", "failed"]
+    mode: Literal["demo", "openai"]
+    model_name: str | None
+    task: str
+    output: str | None
+    error: str | None
+    steps: list[dict]
+    initial_state: dict
+    final_state: dict
+    started_at: datetime
+    finished_at: datetime | None

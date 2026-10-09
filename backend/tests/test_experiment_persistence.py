@@ -141,5 +141,118 @@ def test_database_rejects_unsupported_status(database_connection):
     with Session(database_connection, join_transaction_mode="create_savepoint") as session:
         with pytest.raises(IntegrityError):
             with session.begin():
-                session.add(Experiment(**draft(), status="running"))
+                session.add(Experiment(**draft(), status="unknown"))
                 session.flush()
+
+
+def test_run_is_persisted_and_experiment_changes_status(client):
+    saved = client.post("/experiments", json=draft()).json()
+    path = f'/experiments/{saved["id"]}/runs'
+    response = client.post(path, json={"mode": "demo"})
+    assert response.status_code == 201
+    run = response.json()
+    assert run["status"] == "completed" and run["mode"] == "demo"
+    assert run["model_name"] is None
+    assert run["final_state"]["refunded_cents"] == 4900
+    assert run["finished_at"] is not None
+    assert client.get(path).json() == [run]
+    assert client.get(f'/experiments/{saved["id"]}').json()["status"] == "completed"
+    rerun = client.post(path, json={}).json()
+    assert rerun["id"] != run["id"]
+    assert rerun["initial_state"]["refunded_cents"] == 0
+    assert len(client.get(path + "?limit=1").json()) == 1
+    assert client.get(path + "?limit=21").status_code == 422
+
+
+@pytest.mark.parametrize("changes", [{"scenarios": ["normal", "timeout_after_commit"]}, {"agent_version": "unknown"}])
+def test_unsupported_execution_does_not_mutate_experiment(client, changes):
+    saved = client.post("/experiments", json=draft() | changes).json()
+    path = f'/experiments/{saved["id"]}/runs'
+    assert client.post(path, json={}).status_code == 409
+    assert client.get(path).json() == []
+    assert client.get(f'/experiments/{saved["id"]}').json()["status"] == "draft"
+
+
+def test_missing_key_does_not_claim_experiment(client, monkeypatch):
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    saved = client.post("/experiments", json=draft()).json()
+    path = f'/experiments/{saved["id"]}/runs'
+    assert client.post(path, json={"mode": "openai"}).status_code == 503
+    assert client.get(path).json() == []
+    assert client.get(f'/experiments/{saved["id"]}').json()["status"] == "draft"
+
+
+def test_run_failure_retains_partial_state(client, monkeypatch):
+    from app.agent import AgentError, DemoDriver
+    class FailingDriver(DemoDriver):
+        def decide(self, history):
+            if len(history) >= 5:
+                raise AgentError("Simulated model failure.")
+            return super().decide(history)
+    monkeypatch.setattr("app.execution.make_driver", lambda mode: (FailingDriver(), None))
+    saved = client.post("/experiments", json=draft()).json()
+    path = f'/experiments/{saved["id"]}/runs'
+    run = client.post(path, json={}).json()
+    assert run["status"] == "failed"
+    assert run["final_state"]["refunded_cents"] == 4900
+    assert len(run["steps"]) == 2
+    assert client.get(path).json()[0]["error"] == "Simulated model failure."
+    assert client.get(f'/experiments/{saved["id"]}').json()["status"] == "failed"
+
+
+def test_run_routes_handle_missing_ids_and_invalid_mode(client):
+    path = f"/experiments/{uuid4()}/runs"
+    assert client.get(path).status_code == 404
+    assert client.post(path, json={}).status_code == 404
+    assert client.post(path, json={"mode": "unknown"}).status_code == 422
+
+
+def test_atomic_claim_blocks_a_second_run(test_engine, monkeypatch):
+    from concurrent.futures import ThreadPoolExecutor
+    from threading import Event
+    from fastapi import HTTPException
+    from sqlalchemy import delete
+    from app.agent import DemoDriver
+    from app.execution import start_run
+    from app.models import AgentRun
+
+    entered, release = Event(), Event()
+    active_session = {}
+    class BlockingDriver(DemoDriver):
+        def decide(self, history):
+            assert not active_session["session"].in_transaction()
+            entered.set()
+            assert release.wait(5)
+            return super().decide(history)
+    monkeypatch.setattr("app.execution.make_driver", lambda mode: (BlockingDriver(), None))
+    with Session(test_engine, expire_on_commit=False) as session:
+        experiment = Experiment(**draft("Concurrent run"))
+        with session.begin():
+            session.add(experiment)
+            session.flush()
+        experiment_id = experiment.id
+
+    def first_run():
+        with Session(test_engine, expire_on_commit=False) as session:
+            active_session["session"] = session
+            return start_run(experiment_id, "demo", session)
+
+    try:
+        with ThreadPoolExecutor(max_workers=1) as pool:
+            future = pool.submit(first_run)
+            try:
+                assert entered.wait(5)
+                with Session(test_engine, expire_on_commit=False) as session:
+                    # The first claim is committed and visible while the model is blocked.
+                    assert session.get(Experiment, experiment_id).status == "running"
+                    session.rollback()
+                    with pytest.raises(HTTPException) as caught:
+                        start_run(experiment_id, "demo", session)
+                    assert caught.value.status_code == 409
+            finally:
+                release.set()
+            assert future.result(timeout=5).status == "completed"
+    finally:
+        with test_engine.begin() as connection:
+            connection.execute(delete(AgentRun).where(AgentRun.experiment_id == experiment_id))
+            connection.execute(delete(Experiment).where(Experiment.id == experiment_id))

@@ -89,8 +89,9 @@ export function ExperimentForm() {
     <section className="experiment-section" aria-labelledby="experiment-heading">
       <h2 id="experiment-heading">Create an experiment draft</h2>
       <p id="experiment-help">
-        Save a configuration for a future experiment. These scenario choices are
-        planned; saving does not verify agent availability or execute tools.
+        Save a configuration, then run it from the saved list. Execution currently
+        supports refund-v1 with Normal execution only; the fault choices are planned.
+        Saving does not execute tools.
       </p>
 
       <form onSubmit={handleSubmit} aria-busy={isSubmitting} aria-describedby="experiment-help">
