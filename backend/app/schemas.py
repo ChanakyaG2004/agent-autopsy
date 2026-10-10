@@ -3,6 +3,7 @@ from typing import Literal
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
+from app.evaluation import RefundEvaluation
 
 Scenario = Literal["normal", "timeout_after_commit", "permission_denied"]
 
@@ -36,7 +37,7 @@ class ExperimentRead(ExperimentDraft):
 
 class RunRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    mode: Literal["demo", "openai"] = "demo"
+    mode: Literal["demo", "demo_claim_only", "openai"] = "demo"
 
 
 class RunRead(BaseModel):
@@ -44,9 +45,10 @@ class RunRead(BaseModel):
     id: UUID
     experiment_id: UUID
     status: Literal["running", "completed", "failed"]
-    mode: Literal["demo", "openai"]
+    mode: Literal["demo", "demo_claim_only", "openai"]
     model_name: str | None
     trace_id: str | None
+    evaluation: RefundEvaluation | None
     task: str
     output: str | None
     error: str | None

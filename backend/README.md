@@ -2,6 +2,8 @@
 
 The FastAPI application validates configurations, saves experiments, and executes `refund-v1` with only the `normal` scenario against simulated tools. Run records are stored in PostgreSQL. The default driver is a deterministic demo, not an LLM.
 
+Each new execution receives a versioned deterministic ledger evaluation, independent of execution status and final answer text. See [refund evaluation](../docs/refund-evaluation.md) for checks, evidence validation, and the deliberately incorrect claim-only demo.
+
 Tracing is opt-in. See [Phoenix tracing setup and design](../docs/phoenix-tracing.md) to start the local collector, enable export, and inspect normal/error traces. Application PostgreSQL remains independent of Phoenix's local trace store.
 
 This application will own request validation, application data, agent execution, benchmark execution, and evaluation. The agent runner will remain separate from HTTP handlers so a local command and, eventually, a worker can invoke the same logic.
@@ -33,7 +35,7 @@ Use Python 3.11 or newer. `uv sync` creates a project-local `.venv` and installs
 
 `.env.example` documents the development and test database URLs. To use an existing PostgreSQL service, create dedicated databases and set those URLs in `.env` instead of running the bootstrap. Environment files are ignored by Git. The application also has the example development URL as a local default.
 
-Open http://127.0.0.1:8000/docs. `POST /experiments` returns 201 with a persisted draft, `GET /experiments` lists a bounded page, and `GET /experiments/{id}` retrieves one record. `POST /experiments/{id}/runs` accepts `{"mode":"demo"}` (or configured `"openai"`) and synchronously executes a run. `GET /experiments/{id}/runs` returns the latest 10 runs, with `limit` bounded at 20. A created run returns 201 even when its execution status is `failed`; inspect the body. The validation-only endpoint remains available. A request to `/` returns 404.
+Open http://127.0.0.1:8000/docs. `POST /experiments` returns 201 with a persisted draft, `GET /experiments` lists a bounded page, and `GET /experiments/{id}` retrieves one record. `POST /experiments/{id}/runs` accepts `{"mode":"demo"}`, `{"mode":"demo_claim_only"}`, or configured `"openai"` mode and synchronously executes a run. The claim-only mode is a scripted negative control that skips tools; it is not an LLM or a fault-injection scenario. `GET /experiments/{id}/runs` returns the latest 10 runs, with `limit` bounded at 20. A created run returns 201 even when execution failed or its task verdict failed; inspect `status` and `evaluation.verdict` separately. The validation-only endpoint remains available. A request to `/` returns 404.
 
 Optional real model mode uses `OPENAI_API_KEY` and `OPENAI_MODEL` in the backend environment. Choose a model that supports Responses function calling. Do not put the key in frontend environment variables. Real model requests can incur provider charges. No key is needed for the demo. The OpenAI adapter is tested with mocked SDK responses; live model behavior is not yet verified.
 
@@ -50,6 +52,7 @@ Optional real model mode uses `OPENAI_API_KEY` and `OPENAI_MODEL` in the backend
 - `app/tools.py`: allowlisted tool schemas, strict argument validation, isolated refund state.
 - `app/providers.py`: optional OpenAI Responses adapter and environment configuration.
 - `app/execution.py`: atomic run claim, short database transactions, execution orchestration.
+- `app/evaluation.py`: strict evidence schema, independent fixed expectation, pure deterministic evaluator, and typed verdict/checks.
 - `app/telemetry.py`: owned tracer provider, OpenInference span attributes, bounded background OTLP/HTTP export, and lifecycle shutdown.
 - `app/schemas.py`: typed HTTP request and response contracts.
 - `alembic.ini` and `migrations/`: explicit versioned database schema changes.
@@ -60,6 +63,7 @@ Optional real model mode uses `OPENAI_API_KEY` and `OPENAI_MODEL` in the backend
 - `tests/test_experiment_persistence.py`: real PostgreSQL integration tests, with a separate test database and rolled-back transactions.
 - `tests/test_agent.py`: runner limits, tool safety, state evidence, and mocked provider behavior.
 - `tests/test_telemetry.py`: trace hierarchy, model/demo distinction, selected attribute capture, and exporter failure isolation.
+- `tests/test_evaluation.py`: correct/incorrect ledger cases, malformed evidence, fixed-oracle checks, and deterministic behavior.
 
 FastAPI defines request handling. Uvicorn is the HTTP server that receives connections and invokes the application. The `--reload` flag restarts the development server when Python files change; `--reload-dir app` limits watching to source files so dependency installs do not trigger restarts.
 

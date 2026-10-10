@@ -29,6 +29,8 @@ The root `.nvmrc` records the Node.js version used for setup. If you use nvm, ru
 - `src/components/experiment-form.tsx`: interactive configuration form, submission state, and a direct API request.
 - `src/components/experiment-list.tsx`: fetches and displays recent saved experiments with loading, empty, and error states.
 - `src/components/experiment-runner.tsx`: execution driver selection, explicit run action, saved run history, evidence inspection, and Phoenix trace links.
+- `src/components/run-evaluation.tsx`: displays task verdict, evaluator version, and reasons separately from execution status. It is imported within the runner's Client Component boundary and needs no browser state of its own.
+- `src/lib/evaluation.ts`: evaluation contracts and nested runtime response validation.
 - `src/lib/runs.ts`: run response contract and runtime response validation.
 - `src/lib/experiments.ts`: shared frontend contracts, API URL, and response type guard.
 - `.env.example`: browser-visible API and Phoenix UI base URLs; copy to `.env.local` to change defaults and restart the frontend. Never put provider credentials here.
@@ -53,10 +55,13 @@ The page saves drafts and executes the supported normal refund scenario. Start P
 6. Save a draft with `refund-v1` and only Normal execution selected. Open its run panel and use the deterministic demo.
 7. Inspect the tool steps and state snapshots. Reload, reopen the panel, and click Refresh run history to retrieve the saved result.
 8. With backend tracing enabled and Phoenix running, follow Open trace in Phoenix. Historical runs created without tracing display an explicit no-trace message.
+9. Run the claim-only demo on the same experiment. It intentionally claims success without issuing a refund: execution completes, but the task verdict fails. Reload and refresh history to verify both verdicts persist.
 
 The page and evidence items are Server Components. `ExperimentForm`, `ExperimentList`, and `ExperimentRunner` use `"use client"` for state, events, and browser fetching. Saving a draft does not run an agent. Failed save or execution responses can be ambiguous; refresh the relevant history before retrying rather than assuming nothing was stored. The run request waits up to 90 seconds in the browser; aborting that wait does not cancel backend execution.
 
 Read [the persistence walkthrough](../docs/experiment-persistence.md) and [execution walkthrough](../docs/agent-execution.md) alongside the component code. The list displays up to 20 experiments and refreshes after a save. Run panels retrieve the latest 10 runs on demand. Refresh saved experiments to update the experiment status after running.
+
+Read [the evaluation walkthrough](../docs/refund-evaluation.md) for the three verdicts and the limits of a state-only check. Historical runs remain explicitly unevaluated rather than being silently graded with new logic.
 
 ## Checks
 

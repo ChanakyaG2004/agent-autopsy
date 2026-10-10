@@ -1,5 +1,6 @@
 """Short database transactions around synchronous execution, never around model calls."""
 
+import logging
 from datetime import datetime, timezone
 from uuid import UUID
 
@@ -8,10 +9,13 @@ from sqlalchemy import update
 from sqlalchemy.orm import Session
 
 from app.agent import TASK, execute_agent
+from app.evaluation import evaluate_refund, unavailable_evaluation
 from app.models import AgentRun, Experiment
 from app.providers import ProviderNotConfigured, make_driver
 from app.tools import RefundSandbox
 from app.telemetry import mark_failure, set_json, span, trace_id
+
+logger = logging.getLogger(__name__)
 
 
 def start_run(experiment_id: UUID, mode: str, session: Session) -> AgentRun:
@@ -48,6 +52,20 @@ def start_run(experiment_id: UUID, mode: str, session: Session) -> AgentRun:
             captured_trace_id = trace_id(run_span)
             set_json(run_span, "input", {"task": TASK})
             result = execute_agent(driver)
+            try:
+                with span("evaluation.refund", "EVALUATOR", **{
+                    "evaluation.version": "refund-ledger-v1",
+                }) as evaluation_span:
+                    evaluation = evaluate_refund(result.final_state)
+                    set_json(evaluation_span, "output", {
+                        "verdict": evaluation.verdict,
+                        "checks": {check.name: check.passed for check in evaluation.checks},
+                    })
+            except Exception as exc:
+                logger.error("Refund evaluation failed: %s", type(exc).__name__)
+                evaluation = unavailable_evaluation()
+            run_span.set_attribute("agent.evaluation.verdict", evaluation.verdict)
+            run_span.set_attribute("agent.evaluation.version", evaluation.evaluator_version)
             run_span.set_attribute("agent.execution_status", result.status)
             set_json(run_span, "output", {
                 "execution_status": result.status,
@@ -58,6 +76,7 @@ def start_run(experiment_id: UUID, mode: str, session: Session) -> AgentRun:
                 mark_failure(run_span, result.error)
             with session.begin():
                 run.trace_id = captured_trace_id
+                run.evaluation = evaluation.model_dump(mode="json")
                 run.status = result.status
                 run.output = result.output
                 run.error = result.error

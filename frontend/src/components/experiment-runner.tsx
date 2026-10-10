@@ -2,11 +2,12 @@
 
 import { useId, useState } from "react";
 import { apiBaseUrl, type SavedExperiment } from "@/lib/experiments";
-import { isAgentRun, phoenixTraceUrl, type AgentRun } from "@/lib/runs";
+import { isAgentRun, phoenixTraceUrl, type AgentRun, type ExecutionMode } from "@/lib/runs";
+import { RunEvaluation } from "@/components/run-evaluation";
 
 export function ExperimentRunner({ experiment }: { experiment: SavedExperiment }) {
   const selectId = useId();
-  const [mode, setMode] = useState<"demo" | "openai">("demo");
+  const [mode, setMode] = useState<ExecutionMode>("demo");
   const [runs, setRuns] = useState<AgentRun[]>([]);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
@@ -55,7 +56,7 @@ export function ExperimentRunner({ experiment }: { experiment: SavedExperiment }
       if (!isAgentRun(body)) throw new Error("Unexpected run response. Refresh run history before retrying.");
       setRuns((previous) => [body, ...previous.filter((item) => item.id !== body.id)].slice(0, 10));
       setLoaded(true);
-      setMessage(`Execution ${body.status}. Its result has been saved.`);
+      setMessage(`Execution ${body.status}; task evaluation ${body.evaluation?.verdict.replaceAll("_", " ") ?? "not available"}. Both outcomes have been saved.`);
     } catch (caught) {
       setMessage("");
       setError(caught instanceof Error && !(caught instanceof TypeError) && !(caught instanceof DOMException)
@@ -71,10 +72,12 @@ export function ExperimentRunner({ experiment }: { experiment: SavedExperiment }
       {!supported && <p>Save a matching draft above to run this milestone. Fault scenarios are not implemented yet.</p>}
       <label htmlFor={selectId}>Execution driver</label>
       <select id={selectId} value={mode} disabled={busy}
-        onChange={(event) => setMode(event.target.value as "demo" | "openai")}>
+        onChange={(event) => setMode(event.target.value as ExecutionMode)}>
         <option value="demo">Deterministic demo — no LLM</option>
+        <option value="demo_claim_only">Claim-only demo — intentionally skips tools</option>
         <option value="openai">OpenAI — backend key & model required</option>
       </select>
+      {mode === "demo_claim_only" && <p>This scripted negative control claims success without issuing a refund. Its task evaluation should fail. No LLM is used.</p>}
       <p>Demo checks the execution path, not model quality. “Completed” means the loop ended normally; it is not a correctness score.</p>
       <button type="button" disabled={busy || !supported} onClick={() => void run()}>
         {busy ? "Working…" : "Run simulated refund"}
@@ -86,7 +89,9 @@ export function ExperimentRunner({ experiment }: { experiment: SavedExperiment }
       <p>Most recent 10 runs. Refresh saved experiments above to update its status.</p>
       {runs.map((saved) => (
         <article className="run-result" key={saved.id}>
-          <h3>{saved.mode === "demo" ? "Deterministic demo (no LLM)" : `OpenAI · ${saved.model_name}`} · {saved.status}</h3>
+          <h3>{saved.mode === "demo" ? "Deterministic demo (no LLM)" :
+            saved.mode === "demo_claim_only" ? "Claim-only demo (negative control, no LLM)" : `OpenAI · ${saved.model_name}`}</h3>
+          <p><strong>Execution:</strong> {saved.status}</p>
           <p>{new Date(saved.started_at).toLocaleString()} · <code>{saved.id}</code></p>
           {saved.trace_id ? (
             <p>
@@ -100,6 +105,7 @@ export function ExperimentRunner({ experiment }: { experiment: SavedExperiment }
           <p><strong>Task:</strong> {saved.task}</p>
           <p><strong>Agent’s claim:</strong> {saved.output ?? "No final answer recorded."}</p>
           {saved.error && <p className="message error">{saved.error}</p>}
+          <RunEvaluation evaluation={saved.evaluation} running={saved.status === "running"} />
           <details open>
             <summary>Executed steps ({saved.steps.length})</summary>
             <pre>{JSON.stringify(saved.steps, null, 2)}</pre>

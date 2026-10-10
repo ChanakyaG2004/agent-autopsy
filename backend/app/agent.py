@@ -130,3 +130,10 @@ class DemoDriver:
         item = {"type": "function_call", "name": name, "call_id": call_id,
                 "arguments": json.dumps(arguments)}
         return ModelTurn([item], [ToolCall(name, arguments, call_id)])
+
+
+class ClaimOnlyDemoDriver:
+    """An explicitly labeled negative control; intentionally performs no actions."""
+
+    def decide(self, history: list[dict]) -> ModelTurn:
+        return ModelTurn([], answer="I refunded the full 4900 USD cents for order-123.")

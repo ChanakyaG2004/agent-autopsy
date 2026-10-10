@@ -34,7 +34,8 @@ class AgentRun(Base):
     __tablename__ = "agent_runs"
     __table_args__ = (
         CheckConstraint("status IN ('running', 'completed', 'failed')", name="run_status"),
-        CheckConstraint("mode IN ('demo', 'openai')", name="run_mode"),
+        CheckConstraint("mode IN ('demo', 'demo_claim_only', 'openai')", name="run_mode"),
+        CheckConstraint("evaluation IS NULL OR jsonb_typeof(evaluation) = 'object'", name="run_evaluation_object"),
     )
 
     id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
@@ -43,6 +44,7 @@ class AgentRun(Base):
     mode: Mapped[str] = mapped_column(String(16))
     model_name: Mapped[str | None] = mapped_column(String(200))
     trace_id: Mapped[str | None] = mapped_column(String(32))
+    evaluation: Mapped[dict | None] = mapped_column(JSONB(none_as_null=True))
     task: Mapped[str] = mapped_column(Text)
     output: Mapped[str | None] = mapped_column(Text)
     error: Mapped[str | None] = mapped_column(Text)

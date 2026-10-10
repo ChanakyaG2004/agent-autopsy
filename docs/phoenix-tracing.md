@@ -1,5 +1,7 @@
 # Phoenix tracing milestone
 
+Subsequent milestone: [deterministic refund evaluation](refund-evaluation.md) adds an EVALUATOR child span and verdict attributes. The six-span demo tree below describes the original tracing checkpoint; a newly evaluated normal demo has seven spans. New task verdicts remain separate from operational span status.
+
 The existing execution path now emits real OpenTelemetry spans to a local Arize Phoenix collector. OpenInference attributes tell Phoenix whether an operation is an agent, a chain/decision, a tool, or an actual LLM request. Saved PostgreSQL runs store the corresponding trace ID.
 
 ## What a trace contains

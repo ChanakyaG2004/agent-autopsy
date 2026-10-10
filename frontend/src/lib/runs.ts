@@ -1,10 +1,15 @@
+import { isRefundEvaluation, type RefundEvaluation } from "@/lib/evaluation";
+
+export type ExecutionMode = "demo" | "demo_claim_only" | "openai";
+
 export interface AgentRun {
   id: string;
   experiment_id: string;
   status: "running" | "completed" | "failed";
-  mode: "demo" | "openai";
+  mode: ExecutionMode;
   model_name: string | null;
   trace_id: string | null;
+  evaluation: RefundEvaluation | null;
   task: string;
   output: string | null;
   error: string | null;
@@ -33,9 +38,10 @@ export function isAgentRun(value: unknown): value is AgentRun {
   return typeof value.id === "string" && uuid.test(value.id) &&
     typeof value.experiment_id === "string" && uuid.test(value.experiment_id) &&
     ["running", "completed", "failed"].includes(String(value.status)) &&
-    (value.mode === "demo" || value.mode === "openai") &&
+    (value.mode === "demo" || value.mode === "demo_claim_only" || value.mode === "openai") &&
     (value.model_name === null || typeof value.model_name === "string") &&
     (value.trace_id === null || (typeof value.trace_id === "string" && /^[0-9a-f]{32}$/.test(value.trace_id))) &&
+    (value.evaluation === null || isRefundEvaluation(value.evaluation)) &&
     typeof value.task === "string" &&
     (value.output === null || typeof value.output === "string") &&
     (value.error === null || typeof value.error === "string") &&

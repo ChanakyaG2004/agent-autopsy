@@ -3,7 +3,7 @@ import os
 
 from openai import APIError, OpenAI
 
-from app.agent import AgentError, DemoDriver, INSTRUCTIONS, ModelTurn, ToolCall
+from app.agent import AgentError, ClaimOnlyDemoDriver, DemoDriver, INSTRUCTIONS, ModelTurn, ToolCall
 from app.tools import TOOL_SCHEMAS
 from app.telemetry import span
 
@@ -55,6 +55,8 @@ class OpenAIDriver:
 def make_driver(mode: str):
     if mode == "demo":
         return DemoDriver(), None
+    if mode == "demo_claim_only":
+        return ClaimOnlyDemoDriver(), None
     key = os.environ.get("OPENAI_API_KEY", "").strip()
     model = os.environ.get("OPENAI_MODEL", "").strip()
     if not key or not model:

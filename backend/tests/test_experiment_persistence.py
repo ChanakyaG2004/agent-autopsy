@@ -154,6 +154,8 @@ def test_run_is_persisted_and_experiment_changes_status(client):
     assert run["status"] == "completed" and run["mode"] == "demo"
     assert run["model_name"] is None
     assert run["trace_id"] is None
+    assert run["evaluation"]["verdict"] == "passed"
+    assert run["evaluation"]["evaluator_version"] == "refund-ledger-v1"
     assert run["final_state"]["refunded_cents"] == 4900
     assert run["finished_at"] is not None
     assert client.get(path).json() == [run]
@@ -197,6 +199,8 @@ def test_run_failure_retains_partial_state(client, monkeypatch):
     assert run["status"] == "failed"
     assert run["final_state"]["refunded_cents"] == 4900
     assert len(run["steps"]) == 2
+    # The business action succeeded even though the driver failed before answering.
+    assert run["evaluation"]["verdict"] == "passed"
     assert client.get(path).json()[0]["error"] == "Simulated model failure."
     assert client.get(f'/experiments/{saved["id"]}').json()["status"] == "failed"
 
@@ -259,8 +263,8 @@ def test_atomic_claim_blocks_a_second_run(test_engine, monkeypatch):
             connection.execute(delete(Experiment).where(Experiment.id == experiment_id))
 
 
-@pytest.mark.parametrize("failed", [False, True])
-def test_trace_id_links_saved_run_to_root_span(client, monkeypatch, failed):
+@pytest.mark.parametrize("failed,mode", [(False, "demo"), (True, "demo"), (False, "demo_claim_only")])
+def test_trace_id_links_saved_run_to_root_span(client, monkeypatch, failed, mode):
     from opentelemetry.sdk.trace import TracerProvider
     from opentelemetry.sdk.trace.export import SimpleSpanProcessor
     from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
@@ -280,13 +284,82 @@ def test_trace_id_links_saved_run_to_root_span(client, monkeypatch, failed):
     try:
         experiment = client.post("/experiments", json=draft("Traced refund")).json()
         path = f'/experiments/{experiment["id"]}/runs'
-        run = client.post(path, json={}).json()
+        run = client.post(path, json={"mode": mode}).json()
         root = next(item for item in exporter.get_finished_spans() if item.name == "agent.run")
         assert run["trace_id"] == f"{root.context.trace_id:032x}"
         assert root.attributes["agent.run_id"] == run["id"]
         assert root.attributes["agent.experiment_id"] == experiment["id"]
         assert root.status.status_code == (StatusCode.ERROR if failed else StatusCode.OK)
         assert run["status"] == ("failed" if failed else "completed")
+        assert root.attributes["agent.evaluation.verdict"] == ("failed" if failed or mode == "demo_claim_only" else "passed")
+        evaluation_span = next(item for item in exporter.get_finished_spans() if item.name == "evaluation.refund")
+        assert evaluation_span.parent.span_id == root.context.span_id
+        assert evaluation_span.attributes["openinference.span.kind"] == "EVALUATOR"
+        assert evaluation_span.status.status_code == StatusCode.OK
         assert client.get(path).json()[0]["trace_id"] == run["trace_id"]
     finally:
         provider.shutdown()
+
+
+def test_claim_only_mode_saves_failed_verdict_without_changing_execution_status(client, monkeypatch):
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    experiment = client.post("/experiments", json=draft("Claim-only negative control")).json()
+    path = f'/experiments/{experiment["id"]}/runs'
+    assert client.post(path, json={"mode": "demo_claim_only", "evaluation": {"verdict": "passed"}}).status_code == 422
+    assert client.get(path).json() == []
+    response = client.post(path, json={"mode": "demo_claim_only"})
+    assert response.status_code == 201
+    run = response.json()
+    assert run["mode"] == "demo_claim_only" and run["model_name"] is None
+    assert run["status"] == "completed"
+    assert run["evaluation"]["verdict"] == "failed"
+    assert run["evaluation"]["observed"]["refunded_cents"] == 0
+    assert client.get(path).json()[0] == run
+    assert client.get(f'/experiments/{experiment["id"]}').json()["status"] == "completed"
+
+
+def test_historical_run_is_not_silently_evaluated(client, database_connection):
+    from app.agent import TASK
+    from app.models import AgentRun
+    from app.tools import RefundSandbox
+    experiment = client.post("/experiments", json=draft("Historical evidence")).json()
+    with Session(database_connection, join_transaction_mode="create_savepoint") as session:
+        with session.begin():
+            state = RefundSandbox().snapshot()
+            session.add(AgentRun(experiment_id=experiment["id"], mode="demo", task=TASK,
+                                 status="failed", initial_state=state, final_state=state))
+    runs = client.get(f'/experiments/{experiment["id"]}/runs').json()
+    assert runs[0]["evaluation"] is None
+
+
+def test_database_rejects_scalar_evaluation(database_connection):
+    from app.agent import TASK
+    from app.models import AgentRun
+    from app.tools import RefundSandbox
+    with Session(database_connection, join_transaction_mode="create_savepoint") as session:
+        with pytest.raises(IntegrityError):
+            with session.begin():
+                experiment = Experiment(**draft())
+                session.add(experiment)
+                session.flush()
+                state = RefundSandbox().snapshot()
+                session.add(AgentRun(experiment_id=experiment.id, mode="demo", task=TASK,
+                                     status="completed", initial_state=state, final_state=state,
+                                     evaluation="passed"))
+                session.flush()
+
+
+def test_evaluator_error_does_not_lose_completed_execution(client, monkeypatch):
+    def broken_evaluator(state):
+        raise RuntimeError("private diagnostic payload")
+    monkeypatch.setattr("app.execution.evaluate_refund", broken_evaluator)
+    experiment = client.post("/experiments", json=draft("Evaluator outage")).json()
+    path = f'/experiments/{experiment["id"]}/runs'
+    response = client.post(path, json={})
+    assert response.status_code == 201
+    run = response.json()
+    assert run["status"] == "completed"
+    assert run["final_state"]["refunded_cents"] == 4900
+    assert run["evaluation"]["verdict"] == "not_evaluable"
+    assert "private" not in str(run["evaluation"])
+    assert client.get(path).json()[0] == run
