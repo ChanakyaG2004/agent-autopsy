@@ -24,8 +24,10 @@ def start_run(experiment_id: UUID, mode: str, session: Session) -> AgentRun:
         experiment = session.get(Experiment, experiment_id)
         if experiment is None:
             raise HTTPException(404, "Experiment not found")
-        if experiment.agent_version != "refund-v1" or experiment.scenarios != ["normal"]:
-            raise HTTPException(409, "Execution currently supports refund-v1 with only the normal scenario.")
+        if (experiment.agent_version != "refund-v1" or len(experiment.scenarios) != 1
+                or experiment.scenarios[0] not in {"normal", "timeout_after_commit"}):
+            raise HTTPException(409, "Execution supports refund-v1 with exactly one scenario: normal or timeout_after_commit.")
+        scenario = experiment.scenarios[0]
     try:
         driver, model_name = make_driver(mode)
     except ProviderNotConfigured as exc:
@@ -40,7 +42,7 @@ def start_run(experiment_id: UUID, mode: str, session: Session) -> AgentRun:
             if not claimed:
                 raise HTTPException(409, "This experiment already has a running execution.")
             state = RefundSandbox().snapshot()
-            run = AgentRun(experiment_id=experiment_id, mode=mode, model_name=model_name,
+            run = AgentRun(experiment_id=experiment_id, mode=mode, scenario=scenario, model_name=model_name,
                            status="running", task=TASK, initial_state=state, final_state=state)
             session.add(run)
             session.flush()
@@ -48,10 +50,12 @@ def start_run(experiment_id: UUID, mode: str, session: Session) -> AgentRun:
         with span("agent.run", "AGENT", **{
             "agent.run_id": str(run.id), "agent.experiment_id": str(experiment_id),
             "agent.mode": mode, "agent.version": experiment.agent_version,
+            "agent.scenario": scenario,
         }) as run_span:
             captured_trace_id = trace_id(run_span)
             set_json(run_span, "input", {"task": TASK})
-            result = execute_agent(driver)
+            result = execute_agent(driver, scenario=scenario)
+            run_span.set_attribute("agent.fault_injected", result.fault_injected)
             try:
                 with span("evaluation.refund", "EVALUATOR", **{
                     "evaluation.version": "refund-ledger-v1",
@@ -76,6 +80,7 @@ def start_run(experiment_id: UUID, mode: str, session: Session) -> AgentRun:
                 mark_failure(run_span, result.error)
             with session.begin():
                 run.trace_id = captured_trace_id
+                run.fault_injected = result.fault_injected
                 run.evaluation = evaluation.model_dump(mode="json")
                 run.status = result.status
                 run.output = result.output

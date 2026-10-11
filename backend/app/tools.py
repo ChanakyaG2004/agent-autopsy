@@ -10,6 +10,16 @@ class ToolError(Exception):
     pass
 
 
+class ToolResponseTimeout(ToolError):
+    """The caller cannot infer whether the business operation succeeded."""
+
+    def __init__(self):
+        super().__init__(
+            "Tool response timed out. The operation outcome is unknown; "
+            "read the current order state before attempting another refund."
+        )
+
+
 class OrderArguments(BaseModel):
     model_config = ConfigDict(strict=True, extra="forbid")
     order_id: str
@@ -35,7 +45,11 @@ TOOL_SCHEMAS = [
 
 
 class RefundSandbox:
-    def __init__(self):
+    def __init__(self, scenario: str = "normal"):
+        if scenario not in {"normal", "timeout_after_commit"}:
+            raise ValueError("Unsupported sandbox scenario")
+        self._scenario = scenario
+        self._fault_injected = False
         self._state: dict[str, Any] = {
             "order_id": "order-123",
             "paid_cents": 4900,
@@ -43,6 +57,10 @@ class RefundSandbox:
             "refunded_cents": 0,
             "refunds": [],
         }
+
+    @property
+    def fault_injected(self) -> bool:
+        return self._fault_injected
 
     def snapshot(self) -> dict[str, Any]:
         return deepcopy(self._state)
@@ -65,4 +83,8 @@ class RefundSandbox:
                 "refund_id": f"refund-{len(self._state['refunds']) + 1}",
                 "amount_cents": parsed.amount_cents,
             })
+            # Lose the response only after a successful sandbox state mutation.
+            if self._scenario == "timeout_after_commit" and not self._fault_injected:
+                self._fault_injected = True
+                raise ToolResponseTimeout()
         return self.snapshot()

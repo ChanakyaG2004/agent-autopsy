@@ -1,12 +1,14 @@
 import { isRefundEvaluation, type RefundEvaluation } from "@/lib/evaluation";
 
-export type ExecutionMode = "demo" | "demo_claim_only" | "openai";
+export type ExecutionMode = "demo" | "demo_claim_only" | "demo_reconcile" | "openai";
 
 export interface AgentRun {
   id: string;
   experiment_id: string;
   status: "running" | "completed" | "failed";
   mode: ExecutionMode;
+  scenario: "normal" | "timeout_after_commit";
+  fault_injected: boolean;
   model_name: string | null;
   trace_id: string | null;
   evaluation: RefundEvaluation | null;
@@ -38,7 +40,9 @@ export function isAgentRun(value: unknown): value is AgentRun {
   return typeof value.id === "string" && uuid.test(value.id) &&
     typeof value.experiment_id === "string" && uuid.test(value.experiment_id) &&
     ["running", "completed", "failed"].includes(String(value.status)) &&
-    (value.mode === "demo" || value.mode === "demo_claim_only" || value.mode === "openai") &&
+    (value.mode === "demo" || value.mode === "demo_claim_only" || value.mode === "demo_reconcile" || value.mode === "openai") &&
+    (value.scenario === "normal" || value.scenario === "timeout_after_commit") &&
+    typeof value.fault_injected === "boolean" &&
     (value.model_name === null || typeof value.model_name === "string") &&
     (value.trace_id === null || (typeof value.trace_id === "string" && /^[0-9a-f]{32}$/.test(value.trace_id))) &&
     (value.evaluation === null || isRefundEvaluation(value.evaluation)) &&

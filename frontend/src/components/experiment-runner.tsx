@@ -14,7 +14,8 @@ export function ExperimentRunner({ experiment }: { experiment: SavedExperiment }
   const [error, setError] = useState("");
   const [loaded, setLoaded] = useState(false);
   const supported = experiment.agent_version === "refund-v1" &&
-    experiment.scenarios.length === 1 && experiment.scenarios[0] === "normal";
+    experiment.scenarios.length === 1 &&
+    (experiment.scenarios[0] === "normal" || experiment.scenarios[0] === "timeout_after_commit");
 
   async function loadRuns() {
     const response = await fetch(`${apiBaseUrl}/experiments/${experiment.id}/runs`, {
@@ -68,16 +69,18 @@ export function ExperimentRunner({ experiment }: { experiment: SavedExperiment }
     <details className="run-panel">
       <summary>Run & inspect saved results</summary>
       <p>Each run starts with a new simulated $49 order. No real payments or orders are accessed.</p>
-      <p>Execution supports <code>refund-v1</code> with only <code>normal</code> selected.</p>
-      {!supported && <p>Save a matching draft above to run this milestone. Fault scenarios are not implemented yet.</p>}
+      <p>Execution supports <code>refund-v1</code> with exactly one scenario: Normal execution or Response lost after refund commits.</p>
+      {!supported && <p>Save a matching draft with one supported scenario above. Multiple scenarios and Permission denied cannot execute yet.</p>}
       <label htmlFor={selectId}>Execution driver</label>
       <select id={selectId} value={mode} disabled={busy}
         onChange={(event) => setMode(event.target.value as ExecutionMode)}>
-        <option value="demo">Deterministic demo — no LLM</option>
+        <option value="demo">Baseline demo — stops on uncertain writes</option>
+        <option value="demo_reconcile">Recovery demo — verifies after timeout</option>
         <option value="demo_claim_only">Claim-only demo — intentionally skips tools</option>
         <option value="openai">OpenAI — backend key & model required</option>
       </select>
       {mode === "demo_claim_only" && <p>This scripted negative control claims success without issuing a refund. Its task evaluation should fail. No LLM is used.</p>}
+      {mode === "demo_reconcile" && <p>This scripted recovery policy reads the order after an uncertain refund response and avoids refunding again when the read confirms the full amount. No LLM is used.</p>}
       <p>Demo checks the execution path, not model quality. “Completed” means the loop ended normally; it is not a correctness score.</p>
       <button type="button" disabled={busy || !supported} onClick={() => void run()}>
         {busy ? "Working…" : "Run simulated refund"}
@@ -89,9 +92,16 @@ export function ExperimentRunner({ experiment }: { experiment: SavedExperiment }
       <p>Most recent 10 runs. Refresh saved experiments above to update its status.</p>
       {runs.map((saved) => (
         <article className="run-result" key={saved.id}>
-          <h3>{saved.mode === "demo" ? "Deterministic demo (no LLM)" :
+          <h3>{saved.mode === "demo" ? "Baseline demo (no LLM)" :
+            saved.mode === "demo_reconcile" ? "Recovery demo (no LLM)" :
             saved.mode === "demo_claim_only" ? "Claim-only demo (negative control, no LLM)" : `OpenAI · ${saved.model_name}`}</h3>
           <p><strong>Execution:</strong> {saved.status}</p>
+          <p><strong>Scenario:</strong> {saved.scenario === "normal" ? "Normal execution" : "Response lost after refund commits"}</p>
+          {saved.scenario === "timeout_after_commit" && <p className="message fault-message">
+            <strong>Fault injection:</strong> {saved.status === "running" ? "Awaiting final execution evidence."
+              : saved.fault_injected ? "Injected once after the refund changed the sandbox ledger. The driver received an unknown-outcome timeout."
+              : "Not triggered. No successful refund operation reached the injection point."}
+          </p>}
           <p>{new Date(saved.started_at).toLocaleString()} · <code>{saved.id}</code></p>
           {saved.trace_id ? (
             <p>

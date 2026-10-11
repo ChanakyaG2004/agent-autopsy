@@ -10,7 +10,7 @@ from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanE
 from opentelemetry.trace import StatusCode
 
 from app import telemetry
-from app.agent import DemoDriver, ModelTurn, ToolCall, execute_agent
+from app.agent import DemoDriver, ModelTurn, ReconcileDemoDriver, ToolCall, execute_agent
 from app.providers import OpenAIDriver
 
 
@@ -130,3 +130,21 @@ def test_tracing_configuration_failure_does_not_break_execution(monkeypatch):
     monkeypatch.setattr(telemetry, "OTLPSpanExporter", Mock(side_effect=ValueError("invalid endpoint")))
     assert telemetry.configure_tracing() is None
     assert execute_agent(DemoDriver()).status == "completed"
+
+
+def test_recovered_run_keeps_error_on_lost_response_span(captured):
+    with telemetry.span("agent.run", "AGENT"):
+        result = execute_agent(ReconcileDemoDriver(), scenario="timeout_after_commit")
+    spans = captured.get_finished_spans()
+    root = next(item for item in spans if item.name == "agent.run")
+    tools = [item for item in spans if item.name == "tool.execute"]
+    assert result.status == "completed" and root.status.status_code == StatusCode.OK
+    assert [item.attributes["tool.name"] for item in tools] == ["get_order", "issue_refund", "get_order"]
+    lost = tools[1]
+    assert lost.status.status_code == StatusCode.ERROR
+    assert lost.attributes["fault.injected"] is True
+    assert lost.attributes["fault.type"] == "timeout_after_commit"
+    assert json.loads(lost.attributes["input.value"])["amount_cents"] == 4900
+    assert "output.value" not in lost.attributes
+    assert tools[2].status.status_code == StatusCode.OK
+    assert json.loads(tools[2].attributes["output.value"])["refunded_cents"] == 4900

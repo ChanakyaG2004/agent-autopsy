@@ -5,7 +5,7 @@ import logging
 from dataclasses import dataclass, field
 from typing import Any, Protocol
 
-from app.tools import RefundSandbox, ToolError
+from app.tools import RefundSandbox, ToolError, ToolResponseTimeout
 from app.telemetry import set_json, span
 
 TASK = "Refund the full paid amount for order-123, then report what happened."
@@ -13,6 +13,8 @@ INSTRUCTIONS = (
     "You are a refund agent operating only on simulated orders. Read the order before "
     "refunding. Use tools for actions, and report only results supported by tool output. "
     "Call at most one tool at a time. Amounts are integer USD cents."
+    " A tool timeout does not prove that a write failed or succeeded. "
+    "Read the current order state before retrying an uncertain refund."
 )
 MAX_TURNS = 6
 
@@ -47,10 +49,11 @@ class RunResult:
     steps: list[dict]
     initial_state: dict
     final_state: dict
+    fault_injected: bool = False
 
 
-def execute_agent(driver: Driver) -> RunResult:
-    sandbox = RefundSandbox()
+def execute_agent(driver: Driver, scenario: str = "normal") -> RunResult:
+    sandbox = RefundSandbox(scenario)
     initial = sandbox.snapshot()
     history: list[dict[str, Any]] = [{"role": "user", "content": TASK}]
     steps: list[dict] = []
@@ -79,7 +82,14 @@ def execute_agent(driver: Driver) -> RunResult:
                         "agent.turn": turn_number,
                     }) as tool_span:
                         tool_span.set_attribute("agent.argument_count", len(call.arguments))
-                        result = sandbox.execute(call.name, call.arguments)
+                        try:
+                            result = sandbox.execute(call.name, call.arguments)
+                        except ToolResponseTimeout:
+                            # This exception is raised only after strict validation and mutation.
+                            set_json(tool_span, "input", call.arguments)
+                            tool_span.set_attribute("fault.type", "timeout_after_commit")
+                            tool_span.set_attribute("fault.injected", True)
+                            raise
                         # Successful execution establishes strict types, scope, and no extra fields.
                         set_json(tool_span, "input", call.arguments)
                         set_json(tool_span, "output", {
@@ -87,6 +97,15 @@ def execute_agent(driver: Driver) -> RunResult:
                             "refunded_cents": result["refunded_cents"],
                             "refund_count": len(result["refunds"]),
                         })
+                except ToolResponseTimeout as exc:
+                    step.update({"error": str(exc), "error_code": "TOOL_TIMEOUT",
+                                 "outcome": "unknown", "fault": "timeout_after_commit"})
+                    # Driver-visible feedback deliberately omits actual state and injection metadata.
+                    feedback = {"error": {"code": "TOOL_TIMEOUT", "outcome": "unknown",
+                                           "message": str(exc)}}
+                    history.append({"type": "function_call_output", "call_id": call.call_id,
+                                    "output": json.dumps(feedback)})
+                    continue
                 except ToolError as exc:
                     step["error"] = str(exc)
                     raise AgentError(str(exc)) from None
@@ -107,7 +126,14 @@ def execute_agent(driver: Driver) -> RunResult:
         logging.getLogger(__name__).error("Unexpected runner failure: %s", type(exc).__name__)
         error = "Unexpected execution failure. Inspect the saved steps before retrying."
     return RunResult("failed" if error else "completed", output, error, steps,
-                     initial, sandbox.snapshot())
+                     initial, sandbox.snapshot(), sandbox.fault_injected)
+
+
+def demo_tool_turn(name: str, arguments: dict, result_count: int) -> ModelTurn:
+    call_id = f"demo-call-{result_count + 1}"
+    item = {"type": "function_call", "name": name, "call_id": call_id,
+            "arguments": json.dumps(arguments)}
+    return ModelTurn([item], [ToolCall(name, arguments, call_id)])
 
 
 class DemoDriver:
@@ -116,6 +142,8 @@ class DemoDriver:
     def decide(self, history: list[dict]) -> ModelTurn:
         results = [json.loads(item["output"]) for item in history
                    if item.get("type") == "function_call_output"]
+        if results and "error" in results[-1]:
+            raise AgentError("Tool outcome remains unknown. The baseline demo does not reconcile uncertain writes.")
         if len(results) >= 2:
             state = results[-1]
             return ModelTurn([], answer=(
@@ -126,10 +154,27 @@ class DemoDriver:
         arguments = {"order_id": "order-123"}
         if results:
             arguments["amount_cents"] = results[-1]["paid_cents"] - results[-1]["refunded_cents"]
-        call_id = f"demo-call-{len(results) + 1}"
-        item = {"type": "function_call", "name": name, "call_id": call_id,
-                "arguments": json.dumps(arguments)}
-        return ModelTurn([item], [ToolCall(name, arguments, call_id)])
+        return demo_tool_turn(name, arguments, len(results))
+
+
+class ReconcileDemoDriver:
+    """A scripted recovery policy: verify an uncertain write with a fresh read."""
+
+    def decide(self, history: list[dict]) -> ModelTurn:
+        results = [json.loads(item["output"]) for item in history
+                   if item.get("type") == "function_call_output"]
+        if not results or "error" in results[-1]:
+            return demo_tool_turn("get_order", {"order_id": "order-123"}, len(results))
+        state = results[-1]
+        if state["refunded_cents"] == state["paid_cents"]:
+            return ModelTurn([], answer=(
+                f"Verified order {state['order_id']} has {state['refunded_cents']} USD cents "
+                "refunded, based on the latest tool result. No further refund is needed."
+            ))
+        return demo_tool_turn("issue_refund", {
+            "order_id": state["order_id"],
+            "amount_cents": state["paid_cents"] - state["refunded_cents"],
+        }, len(results))
 
 
 class ClaimOnlyDemoDriver:

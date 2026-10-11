@@ -152,6 +152,7 @@ def test_run_is_persisted_and_experiment_changes_status(client):
     assert response.status_code == 201
     run = response.json()
     assert run["status"] == "completed" and run["mode"] == "demo"
+    assert run["scenario"] == "normal" and run["fault_injected"] is False
     assert run["model_name"] is None
     assert run["trace_id"] is None
     assert run["evaluation"]["verdict"] == "passed"
@@ -167,7 +168,7 @@ def test_run_is_persisted_and_experiment_changes_status(client):
     assert client.get(path + "?limit=21").status_code == 422
 
 
-@pytest.mark.parametrize("changes", [{"scenarios": ["normal", "timeout_after_commit"]}, {"agent_version": "unknown"}])
+@pytest.mark.parametrize("changes", [{"scenarios": ["normal", "timeout_after_commit"]}, {"scenarios": ["permission_denied"]}, {"agent_version": "unknown"}])
 def test_unsupported_execution_does_not_mutate_experiment(client, changes):
     saved = client.post("/experiments", json=draft() | changes).json()
     path = f'/experiments/{saved["id"]}/runs'
@@ -363,3 +364,74 @@ def test_evaluator_error_does_not_lose_completed_execution(client, monkeypatch):
     assert run["evaluation"]["verdict"] == "not_evaluable"
     assert "private" not in str(run["evaluation"])
     assert client.get(path).json()[0] == run
+
+
+@pytest.mark.parametrize("mode,status,verdict,injected", [
+    ("demo", "failed", "passed", True),
+    ("demo_reconcile", "completed", "passed", True),
+    ("demo_claim_only", "completed", "failed", False),
+])
+def test_timeout_scenario_persists_execution_fault_and_evaluation(client, mode, status, verdict, injected):
+    experiment = client.post("/experiments", json=draft("Timeout comparison") | {"scenarios": ["timeout_after_commit"]}).json()
+    path = f'/experiments/{experiment["id"]}/runs'
+    assert client.post(path, json={"mode": mode, "scenario": "normal"}).status_code == 422
+    response = client.post(path, json={"mode": mode})
+    assert response.status_code == 201
+    run = response.json()
+    assert run["scenario"] == "timeout_after_commit"
+    assert run["status"] == status and run["evaluation"]["verdict"] == verdict
+    assert run["fault_injected"] is injected
+    assert client.get(path).json()[0] == run
+    assert client.get(f'/experiments/{experiment["id"]}').json()["status"] == status
+    if mode == "demo_reconcile":
+        assert [step.get("tool", step["kind"]) for step in run["steps"]] == ["get_order", "issue_refund", "get_order", "answer"]
+        assert len(run["final_state"]["refunds"]) == 1
+        rerun = client.post(path, json={"mode": mode}).json()
+        assert rerun["id"] != run["id"] and rerun["fault_injected"] is True
+        assert rerun["initial_state"]["refunds"] == []
+
+
+@pytest.mark.parametrize("changes", [{"scenario": "unsupported"}, {"scenario": "normal", "fault_injected": True}])
+def test_database_rejects_inconsistent_fault_metadata(database_connection, changes):
+    from app.agent import TASK
+    from app.models import AgentRun
+    from app.tools import RefundSandbox
+    with Session(database_connection, join_transaction_mode="create_savepoint") as session:
+        with pytest.raises(IntegrityError):
+            with session.begin():
+                experiment = Experiment(**draft())
+                session.add(experiment)
+                session.flush()
+                state = RefundSandbox().snapshot()
+                session.add(AgentRun(experiment_id=experiment.id, mode="demo", task=TASK,
+                                     status="failed", initial_state=state, final_state=state, **changes))
+                session.flush()
+
+
+@pytest.mark.parametrize("mode,scenario", [("demo", "timeout_after_commit"), ("demo_reconcile", "normal")])
+def test_downgrade_refuses_to_erase_fault_or_recovery_history(test_engine, mode, scenario):
+    from sqlalchemy import insert, select, text
+    from app.agent import TASK
+    from app.models import AgentRun
+    from app.tools import RefundSandbox
+
+    with test_engine.connect() as connection:
+        transaction = connection.begin()
+        try:
+            experiment_id, run_id = uuid4(), uuid4()
+            connection.execute(insert(Experiment).values(id=experiment_id, **draft("Retained evidence")))
+            state = RefundSandbox().snapshot()
+            connection.execute(insert(AgentRun).values(
+                id=run_id, experiment_id=experiment_id, mode=mode, scenario=scenario,
+                fault_injected=scenario == "timeout_after_commit", status="failed", task=TASK,
+                initial_state=state, final_state=state,
+            ))
+            config = Config(str(Path(__file__).resolve().parents[1] / "alembic.ini"))
+            config.attributes["connection"] = connection
+            with pytest.raises(IntegrityError):
+                with connection.begin_nested():
+                    command.downgrade(config, "f348e0530e98")
+            assert connection.scalar(select(AgentRun.scenario).where(AgentRun.id == run_id)) == scenario
+            assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "ea25a4b836bf"
+        finally:
+            transaction.rollback()

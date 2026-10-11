@@ -90,7 +90,8 @@ export function ExperimentForm() {
       <h2 id="experiment-heading">Create an experiment draft</h2>
       <p id="experiment-help">
         Save a configuration, then run it from the saved list. Execution currently
-        supports refund-v1 with Normal execution only; the fault choices are planned.
+        supports refund-v1 with exactly one scenario: Normal execution or Response lost
+        after refund commits. Permission denied is planned.
         Saving does not execute tools.
       </p>
 

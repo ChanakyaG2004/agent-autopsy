@@ -1,7 +1,7 @@
 from datetime import datetime
 from uuid import UUID, uuid4
 
-from sqlalchemy import CheckConstraint, DateTime, ForeignKey, String, Text, func, text
+from sqlalchemy import Boolean, CheckConstraint, DateTime, ForeignKey, String, Text, func, text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -34,7 +34,9 @@ class AgentRun(Base):
     __tablename__ = "agent_runs"
     __table_args__ = (
         CheckConstraint("status IN ('running', 'completed', 'failed')", name="run_status"),
-        CheckConstraint("mode IN ('demo', 'demo_claim_only', 'openai')", name="run_mode"),
+        CheckConstraint("mode IN ('demo', 'demo_claim_only', 'demo_reconcile', 'openai')", name="run_mode"),
+        CheckConstraint("scenario IN ('normal', 'timeout_after_commit')", name="run_scenario"),
+        CheckConstraint("NOT fault_injected OR scenario = 'timeout_after_commit'", name="run_fault_scenario"),
         CheckConstraint("evaluation IS NULL OR jsonb_typeof(evaluation) = 'object'", name="run_evaluation_object"),
     )
 
@@ -42,6 +44,8 @@ class AgentRun(Base):
     experiment_id: Mapped[UUID] = mapped_column(ForeignKey("experiments.id"), index=True)
     status: Mapped[str] = mapped_column(String(16))
     mode: Mapped[str] = mapped_column(String(16))
+    scenario: Mapped[str] = mapped_column(String(32), server_default=text("'normal'"))
+    fault_injected: Mapped[bool] = mapped_column(Boolean, server_default=text("false"))
     model_name: Mapped[str | None] = mapped_column(String(200))
     trace_id: Mapped[str | None] = mapped_column(String(32))
     evaluation: Mapped[dict | None] = mapped_column(JSONB(none_as_null=True))

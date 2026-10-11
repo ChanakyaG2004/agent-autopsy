@@ -45,17 +45,18 @@ The root `.nvmrc` records the Node.js version used for setup. If you use nvm, ru
 
 ## Current learning checkpoint
 
-The page saves drafts and executes the supported normal refund scenario. Start PostgreSQL and the backend using the backend README, then try:
+The page saves drafts and executes one supported scenario per experiment. Start PostgreSQL and the backend using the backend README, then try:
 
 1. Enter an experiment name and agent-version label, select scenarios, and save a draft.
 2. Submit a name made of several spaces to see the backend reject it.
 3. Deselect every scenario to see the form's selection check.
 4. Stop the backend and submit again to see the network error state.
 5. Restart the backend, refresh the page, and verify the saved draft remains in the list.
-6. Save a draft with `refund-v1` and only Normal execution selected. Open its run panel and use the deterministic demo.
+6. Save a draft with `refund-v1` and only Normal execution selected. Open its run panel and use the baseline demo.
 7. Inspect the tool steps and state snapshots. Reload, reopen the panel, and click Refresh run history to retrieve the saved result.
 8. With backend tracing enabled and Phoenix running, follow Open trace in Phoenix. Historical runs created without tracing display an explicit no-trace message.
 9. Run the claim-only demo on the same experiment. It intentionally claims success without issuing a refund: execution completes, but the task verdict fails. Reload and refresh history to verify both verdicts persist.
+10. Save a new draft with only Response lost after refund commits selected; deselect Normal execution. Run the baseline, then the recovery demo. Compare execution status, the actual injection flag, and the tool sequence. See [the timeout walkthrough](../docs/timeout-after-commit.md).
 
 The page and evidence items are Server Components. `ExperimentForm`, `ExperimentList`, and `ExperimentRunner` use `"use client"` for state, events, and browser fetching. Saving a draft does not run an agent. Failed save or execution responses can be ambiguous; refresh the relevant history before retrying rather than assuming nothing was stored. The run request waits up to 90 seconds in the browser; aborting that wait does not cancel backend execution.
 

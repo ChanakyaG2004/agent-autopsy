@@ -1,5 +1,7 @@
 # Deterministic refund evaluation
 
+Subsequent milestone: [timeout-after-commit injection](timeout-after-commit.md) adds a real sandbox fault and scripted reconciliation. The same `refund-ledger-v1` expectation applies because the required final business state is unchanged. The original deterministic demo is now labeled Baseline demo in the UI.
+
 The platform now answers a concrete question from saved business evidence: did this isolated sandbox end with exactly one full refund for the expected order? Every new normal-scenario run gets an evaluation alongside its execution outcome. No model judge or provider key is required.
 
 ## Why execution status is insufficient

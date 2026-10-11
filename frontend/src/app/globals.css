@@ -96,3 +96,4 @@ select:focus-visible, summary:focus-visible { outline: 3px solid #2563eb; outlin
 .evaluation-not_evaluable { border-color: #92400e; background: #fffbeb; }
 .evaluation-checks div { margin: 0.6rem 0; }
 .evaluation-checks dd { margin-left: 1rem; }
+.fault-message { color: #92400e; background: #fffbeb; }

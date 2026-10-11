@@ -1,6 +1,8 @@
 # Backend
 
-The FastAPI application validates configurations, saves experiments, and executes `refund-v1` with only the `normal` scenario against simulated tools. Run records are stored in PostgreSQL. The default driver is a deterministic demo, not an LLM.
+The FastAPI application validates configurations, saves experiments, and executes `refund-v1` with exactly one supported scenario: `normal` or `timeout_after_commit`. Run evidence is stored in PostgreSQL. The default driver is a deterministic baseline demo, not an LLM.
+
+The [timeout-after-commit walkthrough](../docs/timeout-after-commit.md) explains one-shot response loss, unknown outcomes, and the separate recovery demo. Permission-denied and multi-scenario execution remain unsupported.
 
 Each new execution receives a versioned deterministic ledger evaluation, independent of execution status and final answer text. See [refund evaluation](../docs/refund-evaluation.md) for checks, evidence validation, and the deliberately incorrect claim-only demo.
 
@@ -35,7 +37,7 @@ Use Python 3.11 or newer. `uv sync` creates a project-local `.venv` and installs
 
 `.env.example` documents the development and test database URLs. To use an existing PostgreSQL service, create dedicated databases and set those URLs in `.env` instead of running the bootstrap. Environment files are ignored by Git. The application also has the example development URL as a local default.
 
-Open http://127.0.0.1:8000/docs. `POST /experiments` returns 201 with a persisted draft, `GET /experiments` lists a bounded page, and `GET /experiments/{id}` retrieves one record. `POST /experiments/{id}/runs` accepts `{"mode":"demo"}`, `{"mode":"demo_claim_only"}`, or configured `"openai"` mode and synchronously executes a run. The claim-only mode is a scripted negative control that skips tools; it is not an LLM or a fault-injection scenario. `GET /experiments/{id}/runs` returns the latest 10 runs, with `limit` bounded at 20. A created run returns 201 even when execution failed or its task verdict failed; inspect `status` and `evaluation.verdict` separately. The validation-only endpoint remains available. A request to `/` returns 404.
+Open http://127.0.0.1:8000/docs. `POST /experiments` saves a draft; GET listing and UUID retrieval load records. `POST /experiments/{id}/runs` synchronously executes with mode `demo` (baseline), `demo_reconcile` (scripted recovery), `demo_claim_only` (negative control), or configured `openai`. Scenario comes from the saved experiment, not a run-request override. GET run history defaults to 10 records, bounded at 20. Created runs return 201 even for failed executions; inspect `status`, `evaluation.verdict`, `scenario`, and `fault_injected`. The validation-only endpoint remains available. `/` returns 404.
 
 Optional real model mode uses `OPENAI_API_KEY` and `OPENAI_MODEL` in the backend environment. Choose a model that supports Responses function calling. Do not put the key in frontend environment variables. Real model requests can incur provider charges. No key is needed for the demo. The OpenAI adapter is tested with mocked SDK responses; live model behavior is not yet verified.
 
@@ -48,8 +50,8 @@ Optional real model mode uses `OPENAI_API_KEY` and `OPENAI_MODEL` in the backend
 - `app/main.py`: creates the FastAPI application. Uvicorn loads the `app` object from this module.
 - `app/database.py`: connection pool, declarative base, and request-scoped sessions.
 - `app/models.py`: experiments and agent_runs table mappings, foreign key, constraints, and indexes.
-- `app/agent.py`: driver protocol, bounded explicit loop, deterministic demo.
-- `app/tools.py`: allowlisted tool schemas, strict argument validation, isolated refund state.
+- `app/agent.py`: driver protocol, bounded loop, unknown-outcome feedback, baseline/recovery/claim-only scripts.
+- `app/tools.py`: validated tools, isolated refund state, and one-shot post-mutation response loss.
 - `app/providers.py`: optional OpenAI Responses adapter and environment configuration.
 - `app/execution.py`: atomic run claim, short database transactions, execution orchestration.
 - `app/evaluation.py`: strict evidence schema, independent fixed expectation, pure deterministic evaluator, and typed verdict/checks.
@@ -64,6 +66,7 @@ Optional real model mode uses `OPENAI_API_KEY` and `OPENAI_MODEL` in the backend
 - `tests/test_agent.py`: runner limits, tool safety, state evidence, and mocked provider behavior.
 - `tests/test_telemetry.py`: trace hierarchy, model/demo distinction, selected attribute capture, and exporter failure isolation.
 - `tests/test_evaluation.py`: correct/incorrect ledger cases, malformed evidence, fixed-oracle checks, and deterministic behavior.
+- `tests/test_timeout_recovery.py`: injection timing, one-shot behavior, hidden outcomes, verification reads, retry guards, and turn limits.
 
 FastAPI defines request handling. Uvicorn is the HTTP server that receives connections and invokes the application. The `--reload` flag restarts the development server when Python files change; `--reload-dir app` limits watching to source files so dependency installs do not trigger restarts.
 
