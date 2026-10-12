@@ -30,6 +30,7 @@ The root `.nvmrc` records the Node.js version used for setup. If you use nvm, ru
 - `src/components/experiment-list.tsx`: fetches and displays recent saved experiments with loading, empty, and error states.
 - `src/components/experiment-runner.tsx`: execution driver selection, explicit run action, saved run history, evidence inspection, and Phoenix trace links.
 - `src/components/run-evaluation.tsx`: displays task verdict, evaluator version, and reasons separately from execution status. It is imported within the runner's Client Component boundary and needs no browser state of its own.
+- `src/components/recovery-evaluation.tsx` and `src/lib/recovery.ts`: separate recovery-policy verdict, checks, and runtime contract validation.
 - `src/lib/evaluation.ts`: evaluation contracts and nested runtime response validation.
 - `src/lib/runs.ts`: run response contract and runtime response validation.
 - `src/lib/experiments.ts`: shared frontend contracts, API URL, and response type guard.
@@ -75,3 +76,5 @@ npm run build
 ## Dependency note
 
 The initial full `npm audit` reports five high-severity entries in the development-only ESLint dependency chain, all stemming from the unpatched `braces` advisory [GHSA-vfj7-8cjw-p6xm](https://github.com/advisories/GHSA-vfj7-8cjw-p6xm). `npm audit --omit=dev` reports zero vulnerabilities. Keep the matching Next.js lint configuration; the audit's proposed forced downgrade is not an appropriate fix. Recheck when upstream releases a patch.
+
+Try **Permission denied** with the baseline and recovery demos. Compare failed refund correctness with passed recovery policy for the safe refusal, as explained in [the permission walkthrough](../docs/permission-and-policy.md). Normal runs show recovery as not applicable; unexercised faults show not evaluable. Older runs retain their unevaluated policy history.

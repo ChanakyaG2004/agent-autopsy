@@ -4,6 +4,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 from app.evaluation import RefundEvaluation
+from app.recovery import RecoveryEvaluation
 
 Scenario = Literal["normal", "timeout_after_commit", "permission_denied"]
 
@@ -46,11 +47,12 @@ class RunRead(BaseModel):
     experiment_id: UUID
     status: Literal["running", "completed", "failed"]
     mode: Literal["demo", "demo_claim_only", "demo_reconcile", "openai"]
-    scenario: Literal["normal", "timeout_after_commit"]
+    scenario: Scenario
     fault_injected: bool
     model_name: str | None
     trace_id: str | None
     evaluation: RefundEvaluation | None
+    recovery_evaluation: RecoveryEvaluation | None
     task: str
     output: str | None
     error: str | None

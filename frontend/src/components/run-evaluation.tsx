@@ -13,7 +13,7 @@ const checkLabels: Record<string, string> = {
 
 export function RunEvaluation({ evaluation, running }: { evaluation: RefundEvaluation | null; running: boolean }) {
   if (!evaluation) {
-    return <p><strong>Task evaluation:</strong> {running
+    return <p><strong>Refund ledger:</strong> {running
       ? "Pending execution outcome."
       : "Not evaluated. This historical run has no saved evaluation; run again to evaluate a fresh sandbox."}</p>;
   }
@@ -21,8 +21,8 @@ export function RunEvaluation({ evaluation, running }: { evaluation: RefundEvalu
   const label = evaluation.verdict === "not_evaluable" ? "Not evaluable" :
     evaluation.verdict === "passed" ? "Passed" : "Failed";
   return (
-    <section className={`evaluation-result evaluation-${evaluation.verdict}`} aria-label="Task evaluation">
-      <h4>Task evaluation: {label}</h4>
+    <section className={`evaluation-result evaluation-${evaluation.verdict}`} aria-label="Refund ledger evaluation">
+      <h4>Refund ledger: {label}</h4>
       <p>Deterministic state check · <code>{evaluation.evaluator_version}</code></p>
       <p>Expected one refund of 4,900 USD cents for order-123. The agent’s answer is not used to decide this verdict.</p>
       <dl className="evaluation-checks">

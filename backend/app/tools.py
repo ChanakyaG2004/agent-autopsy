@@ -10,6 +10,13 @@ class ToolError(Exception):
     pass
 
 
+class ToolPermissionDenied(ToolError):
+    """A definitive rejection before mutation; retrying cannot grant permission."""
+
+    def __init__(self):
+        super().__init__("Refund permission denied. No refund was issued. Stop and request authorized assistance.")
+
+
 class ToolResponseTimeout(ToolError):
     """The caller cannot infer whether the business operation succeeded."""
 
@@ -46,7 +53,7 @@ TOOL_SCHEMAS = [
 
 class RefundSandbox:
     def __init__(self, scenario: str = "normal"):
-        if scenario not in {"normal", "timeout_after_commit"}:
+        if scenario not in {"normal", "timeout_after_commit", "permission_denied"}:
             raise ValueError("Unsupported sandbox scenario")
         self._scenario = scenario
         self._fault_injected = False
@@ -76,6 +83,9 @@ class RefundSandbox:
         if parsed.order_id != self._state["order_id"]:
             raise ToolError("Order is outside this run's sandbox.")
         if isinstance(parsed, RefundArguments):
+            if self._scenario == "permission_denied":
+                self._fault_injected = True
+                raise ToolPermissionDenied()
             if self._state["refunded_cents"] + parsed.amount_cents > self._state["paid_cents"]:
                 raise ToolError("Refund would exceed the paid amount.")
             self._state["refunded_cents"] += parsed.amount_cents

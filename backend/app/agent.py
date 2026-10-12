@@ -5,7 +5,7 @@ import logging
 from dataclasses import dataclass, field
 from typing import Any, Protocol
 
-from app.tools import RefundSandbox, ToolError, ToolResponseTimeout
+from app.tools import RefundSandbox, ToolError, ToolResponseTimeout, ToolPermissionDenied
 from app.telemetry import set_json, span
 
 TASK = "Refund the full paid amount for order-123, then report what happened."
@@ -15,6 +15,8 @@ INSTRUCTIONS = (
     "Call at most one tool at a time. Amounts are integer USD cents."
     " A tool timeout does not prove that a write failed or succeeded. "
     "Read the current order state before retrying an uncertain refund."
+    " Permission denied is a definitive rejection: stop writing, report the denial, "
+    "and request authorized assistance. Do not retry or bypass it."
 )
 MAX_TURNS = 6
 
@@ -84,10 +86,11 @@ def execute_agent(driver: Driver, scenario: str = "normal") -> RunResult:
                         tool_span.set_attribute("agent.argument_count", len(call.arguments))
                         try:
                             result = sandbox.execute(call.name, call.arguments)
-                        except ToolResponseTimeout:
-                            # This exception is raised only after strict validation and mutation.
+                        except (ToolResponseTimeout, ToolPermissionDenied) as exc:
+                            # Both injected errors follow strict argument and scope validation.
                             set_json(tool_span, "input", call.arguments)
-                            tool_span.set_attribute("fault.type", "timeout_after_commit")
+                            tool_span.set_attribute("fault.type", "timeout_after_commit"
+                                                    if isinstance(exc, ToolResponseTimeout) else "permission_denied")
                             tool_span.set_attribute("fault.injected", True)
                             raise
                         # Successful execution establishes strict types, scope, and no extra fields.
@@ -97,11 +100,14 @@ def execute_agent(driver: Driver, scenario: str = "normal") -> RunResult:
                             "refunded_cents": result["refunded_cents"],
                             "refund_count": len(result["refunds"]),
                         })
-                except ToolResponseTimeout as exc:
-                    step.update({"error": str(exc), "error_code": "TOOL_TIMEOUT",
-                                 "outcome": "unknown", "fault": "timeout_after_commit"})
+                except (ToolResponseTimeout, ToolPermissionDenied) as exc:
+                    timeout = isinstance(exc, ToolResponseTimeout)
+                    code, outcome, fault = (("TOOL_TIMEOUT", "unknown", "timeout_after_commit")
+                                            if timeout else ("PERMISSION_DENIED", "rejected", "permission_denied"))
+                    step.update({"error": str(exc), "error_code": code,
+                                 "outcome": outcome, "fault": fault})
                     # Driver-visible feedback deliberately omits actual state and injection metadata.
-                    feedback = {"error": {"code": "TOOL_TIMEOUT", "outcome": "unknown",
+                    feedback = {"error": {"code": code, "outcome": outcome,
                                            "message": str(exc)}}
                     history.append({"type": "function_call_output", "call_id": call.call_id,
                                     "output": json.dumps(feedback)})
@@ -143,6 +149,8 @@ class DemoDriver:
         results = [json.loads(item["output"]) for item in history
                    if item.get("type") == "function_call_output"]
         if results and "error" in results[-1]:
+            if results[-1]["error"]["code"] == "PERMISSION_DENIED":
+                raise AgentError("Refund permission denied. The baseline demo stopped without a final response.")
             raise AgentError("Tool outcome remains unknown. The baseline demo does not reconcile uncertain writes.")
         if len(results) >= 2:
             state = results[-1]
@@ -158,11 +166,13 @@ class DemoDriver:
 
 
 class ReconcileDemoDriver:
-    """A scripted recovery policy: verify an uncertain write with a fresh read."""
+    """A scripted policy: verify uncertain writes and respect definitive denials."""
 
     def decide(self, history: list[dict]) -> ModelTurn:
         results = [json.loads(item["output"]) for item in history
                    if item.get("type") == "function_call_output"]
+        if results and results[-1].get("error", {}).get("code") == "PERMISSION_DENIED":
+            return ModelTurn([], answer="Refund permission was denied. No refund was issued. Authorized assistance is required; I will not retry the write.")
         if not results or "error" in results[-1]:
             return demo_tool_turn("get_order", {"order_id": "order-123"}, len(results))
         state = results[-1]

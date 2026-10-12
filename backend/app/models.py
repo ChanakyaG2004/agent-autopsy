@@ -35,9 +35,10 @@ class AgentRun(Base):
     __table_args__ = (
         CheckConstraint("status IN ('running', 'completed', 'failed')", name="run_status"),
         CheckConstraint("mode IN ('demo', 'demo_claim_only', 'demo_reconcile', 'openai')", name="run_mode"),
-        CheckConstraint("scenario IN ('normal', 'timeout_after_commit')", name="run_scenario"),
-        CheckConstraint("NOT fault_injected OR scenario = 'timeout_after_commit'", name="run_fault_scenario"),
+        CheckConstraint("scenario IN ('normal', 'timeout_after_commit', 'permission_denied')", name="run_scenario"),
+        CheckConstraint("NOT fault_injected OR scenario IN ('timeout_after_commit', 'permission_denied')", name="run_fault_scenario"),
         CheckConstraint("evaluation IS NULL OR jsonb_typeof(evaluation) = 'object'", name="run_evaluation_object"),
+        CheckConstraint("recovery_evaluation IS NULL OR jsonb_typeof(recovery_evaluation) = 'object'", name="run_recovery_object"),
     )
 
     id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
@@ -49,6 +50,7 @@ class AgentRun(Base):
     model_name: Mapped[str | None] = mapped_column(String(200))
     trace_id: Mapped[str | None] = mapped_column(String(32))
     evaluation: Mapped[dict | None] = mapped_column(JSONB(none_as_null=True))
+    recovery_evaluation: Mapped[dict | None] = mapped_column(JSONB(none_as_null=True))
     task: Mapped[str] = mapped_column(Text)
     output: Mapped[str | None] = mapped_column(Text)
     error: Mapped[str | None] = mapped_column(Text)

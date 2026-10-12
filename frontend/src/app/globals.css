@@ -94,6 +94,7 @@ select:focus-visible, summary:focus-visible { outline: 3px solid #2563eb; outlin
 .evaluation-passed { border-color: #166534; background: #f0fdf4; }
 .evaluation-failed { border-color: #991b1b; background: #fef2f2; }
 .evaluation-not_evaluable { border-color: #92400e; background: #fffbeb; }
+.evaluation-not_applicable { border-color: #64748b; background: #f8fafc; }
 .evaluation-checks div { margin: 0.6rem 0; }
 .evaluation-checks dd { margin-left: 1rem; }
 .fault-message { color: #92400e; background: #fffbeb; }

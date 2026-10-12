@@ -168,7 +168,7 @@ def test_run_is_persisted_and_experiment_changes_status(client):
     assert client.get(path + "?limit=21").status_code == 422
 
 
-@pytest.mark.parametrize("changes", [{"scenarios": ["normal", "timeout_after_commit"]}, {"scenarios": ["permission_denied"]}, {"agent_version": "unknown"}])
+@pytest.mark.parametrize("changes", [{"scenarios": ["normal", "timeout_after_commit"]}, {"agent_version": "unknown"}])
 def test_unsupported_execution_does_not_mutate_experiment(client, changes):
     saved = client.post("/experiments", json=draft() | changes).json()
     path = f'/experiments/{saved["id"]}/runs'
@@ -297,6 +297,11 @@ def test_trace_id_links_saved_run_to_root_span(client, monkeypatch, failed, mode
         assert evaluation_span.parent.span_id == root.context.span_id
         assert evaluation_span.attributes["openinference.span.kind"] == "EVALUATOR"
         assert evaluation_span.status.status_code == StatusCode.OK
+        recovery_span = next(item for item in exporter.get_finished_spans() if item.name == "evaluation.recovery")
+        assert recovery_span.parent.span_id == root.context.span_id
+        assert recovery_span.attributes["openinference.span.kind"] == "EVALUATOR"
+        assert root.attributes["agent.recovery.verdict"] == "not_applicable"
+        assert run["recovery_evaluation"]["verdict"] == "not_applicable"
         assert client.get(path).json()[0]["trace_id"] == run["trace_id"]
     finally:
         provider.shutdown()
@@ -331,6 +336,7 @@ def test_historical_run_is_not_silently_evaluated(client, database_connection):
                                  status="failed", initial_state=state, final_state=state))
     runs = client.get(f'/experiments/{experiment["id"]}/runs').json()
     assert runs[0]["evaluation"] is None
+    assert runs[0]["recovery_evaluation"] is None
 
 
 def test_database_rejects_scalar_evaluation(database_connection):
@@ -381,6 +387,9 @@ def test_timeout_scenario_persists_execution_fault_and_evaluation(client, mode, 
     assert run["scenario"] == "timeout_after_commit"
     assert run["status"] == status and run["evaluation"]["verdict"] == verdict
     assert run["fault_injected"] is injected
+    assert run["recovery_evaluation"]["verdict"] == {
+        "demo": "failed", "demo_reconcile": "passed", "demo_claim_only": "not_evaluable",
+    }[mode]
     assert client.get(path).json()[0] == run
     assert client.get(f'/experiments/{experiment["id"]}').json()["status"] == status
     if mode == "demo_reconcile":
@@ -432,6 +441,97 @@ def test_downgrade_refuses_to_erase_fault_or_recovery_history(test_engine, mode,
                 with connection.begin_nested():
                     command.downgrade(config, "f348e0530e98")
             assert connection.scalar(select(AgentRun.scenario).where(AgentRun.id == run_id)) == scenario
-            assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "ea25a4b836bf"
+            assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "c0b22d930094"
+        finally:
+            transaction.rollback()
+
+
+@pytest.mark.parametrize("mode,status,policy,injected", [
+    ("demo", "failed", "failed", True),
+    ("demo_reconcile", "completed", "passed", True),
+    ("demo_claim_only", "completed", "not_evaluable", False),
+])
+def test_permission_results_are_saved_independently(client, mode, status, policy, injected):
+    experiment = client.post("/experiments", json=draft("Permission comparison") | {"scenarios": ["permission_denied"]}).json()
+    path = f'/experiments/{experiment["id"]}/runs'
+    assert client.post(path, json={"mode": mode, "recovery_evaluation": {"verdict": "passed"}}).status_code == 422
+    response = client.post(path, json={"mode": mode})
+    assert response.status_code == 201
+    run = response.json()
+    assert run["scenario"] == "permission_denied" and run["fault_injected"] is injected
+    assert run["status"] == status
+    assert run["evaluation"]["verdict"] == "failed"
+    assert run["recovery_evaluation"]["verdict"] == policy
+    assert run["recovery_evaluation"]["evaluator_version"] == "recovery-policy-v1"
+    assert run["initial_state"] == run["final_state"]
+    assert client.get(path).json()[0] == run
+
+
+def test_recovery_evaluator_failure_preserves_execution_and_ledger(client, monkeypatch):
+    def broken(**kwargs):
+        raise RuntimeError("private policy diagnostic")
+    monkeypatch.setattr("app.execution.evaluate_recovery", broken)
+    experiment = client.post("/experiments", json=draft("Recovery evaluator outage")).json()
+    path = f'/experiments/{experiment["id"]}/runs'
+    run = client.post(path, json={"mode": "demo"}).json()
+    assert run["status"] == "completed" and run["evaluation"]["verdict"] == "passed"
+    assert run["recovery_evaluation"]["verdict"] == "not_evaluable"
+    assert "private" not in str(run["recovery_evaluation"])
+    assert client.get(path).json()[0] == run
+
+
+def test_database_rejects_scalar_recovery_grade(database_connection):
+    from app.models import AgentRun
+    from app.tools import RefundSandbox
+    with Session(database_connection, join_transaction_mode="create_savepoint") as session:
+        with pytest.raises(IntegrityError), session.begin():
+            experiment = Experiment(**draft())
+            session.add(experiment)
+            session.flush()
+            state = RefundSandbox().snapshot()
+            session.add(AgentRun(experiment_id=experiment.id, mode="demo", task="Refund",
+                                 status="completed", initial_state=state, final_state=state,
+                                 recovery_evaluation="passed"))
+            session.flush()
+
+
+@pytest.mark.parametrize("scenario,policy", [("permission_denied", None), ("normal", {"verdict": "passed"})])
+def test_downgrade_refuses_to_erase_permission_or_policy_evidence(test_engine, scenario, policy):
+    from sqlalchemy import insert, text
+    from app.models import AgentRun
+    from app.tools import RefundSandbox
+    with test_engine.connect() as connection:
+        transaction = connection.begin()
+        try:
+            experiment_id = uuid4()
+            connection.execute(insert(Experiment).values(id=experiment_id, **draft("Policy history")))
+            state = RefundSandbox().snapshot()
+            connection.execute(insert(AgentRun).values(
+                id=uuid4(), experiment_id=experiment_id, mode="demo", scenario=scenario,
+                status="completed", task="Refund", initial_state=state, final_state=state,
+                recovery_evaluation=policy,
+            ))
+            config = Config(str(Path(__file__).resolve().parents[1] / "alembic.ini"))
+            config.attributes["connection"] = connection
+            with pytest.raises(IntegrityError), connection.begin_nested():
+                command.downgrade(config, "ea25a4b836bf")
+            assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "c0b22d930094"
+        finally:
+            transaction.rollback()
+
+
+def test_empty_policy_migration_round_trip(test_engine):
+    from sqlalchemy import text
+    # Test database only; transaction rollback retains the suite's schema even on failure.
+    assert test_engine.url.database.endswith("_test")
+    with test_engine.connect() as connection:
+        transaction = connection.begin()
+        try:
+            assert connection.scalar(text("SELECT count(*) FROM agent_runs")) == 0
+            config = Config(str(Path(__file__).resolve().parents[1] / "alembic.ini"))
+            config.attributes["connection"] = connection
+            command.downgrade(config, "ea25a4b836bf")
+            command.upgrade(config, "head")
+            assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "c0b22d930094"
         finally:
             transaction.rollback()

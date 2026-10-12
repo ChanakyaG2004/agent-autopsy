@@ -148,3 +148,17 @@ def test_recovered_run_keeps_error_on_lost_response_span(captured):
     assert "output.value" not in lost.attributes
     assert tools[2].status.status_code == StatusCode.OK
     assert json.loads(tools[2].attributes["output.value"])["refunded_cents"] == 4900
+
+
+def test_denied_tool_is_error_while_handled_run_completes(captured):
+    with telemetry.span("agent.run", "AGENT"):
+        result = execute_agent(ReconcileDemoDriver(), scenario="permission_denied")
+    spans = captured.get_finished_spans()
+    assert result.status == "completed"
+    assert next(item for item in spans if item.name == "agent.run").status.status_code == StatusCode.OK
+    tools = [item for item in spans if item.name == "tool.execute"]
+    assert [item.attributes["tool.name"] for item in tools] == ["get_order", "issue_refund"]
+    assert tools[1].status.status_code == StatusCode.ERROR
+    assert tools[1].attributes["fault.type"] == "permission_denied"
+    assert tools[1].attributes["fault.injected"] is True
+    assert "output.value" not in tools[1].attributes

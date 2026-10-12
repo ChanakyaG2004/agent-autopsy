@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 
 from app.agent import TASK, execute_agent
 from app.evaluation import evaluate_refund, unavailable_evaluation
+from app.recovery import evaluate_recovery, unavailable_recovery
 from app.models import AgentRun, Experiment
 from app.providers import ProviderNotConfigured, make_driver
 from app.tools import RefundSandbox
@@ -25,8 +26,8 @@ def start_run(experiment_id: UUID, mode: str, session: Session) -> AgentRun:
         if experiment is None:
             raise HTTPException(404, "Experiment not found")
         if (experiment.agent_version != "refund-v1" or len(experiment.scenarios) != 1
-                or experiment.scenarios[0] not in {"normal", "timeout_after_commit"}):
-            raise HTTPException(409, "Execution supports refund-v1 with exactly one scenario: normal or timeout_after_commit.")
+                or experiment.scenarios[0] not in {"normal", "timeout_after_commit", "permission_denied"}):
+            raise HTTPException(409, "Execution supports refund-v1 with exactly one scenario: normal, timeout_after_commit, or permission_denied.")
         scenario = experiment.scenarios[0]
     try:
         driver, model_name = make_driver(mode)
@@ -70,6 +71,24 @@ def start_run(experiment_id: UUID, mode: str, session: Session) -> AgentRun:
                 evaluation = unavailable_evaluation()
             run_span.set_attribute("agent.evaluation.verdict", evaluation.verdict)
             run_span.set_attribute("agent.evaluation.version", evaluation.evaluator_version)
+            try:
+                with span("evaluation.recovery", "EVALUATOR", **{
+                    "evaluation.version": "recovery-policy-v1",
+                }) as recovery_span:
+                    recovery = evaluate_recovery(
+                        scenario=scenario, fault_injected=result.fault_injected,
+                        steps=result.steps, initial_state=result.initial_state,
+                        final_state=result.final_state,
+                    )
+                    set_json(recovery_span, "output", {
+                        "verdict": recovery.verdict,
+                        "checks": {check.name: check.passed for check in recovery.checks},
+                    })
+            except Exception as exc:
+                logger.error("Recovery evaluation failed: %s", type(exc).__name__)
+                recovery = unavailable_recovery()
+            run_span.set_attribute("agent.recovery.verdict", recovery.verdict)
+            run_span.set_attribute("agent.recovery.version", recovery.evaluator_version)
             run_span.set_attribute("agent.execution_status", result.status)
             set_json(run_span, "output", {
                 "execution_status": result.status,
@@ -82,6 +101,7 @@ def start_run(experiment_id: UUID, mode: str, session: Session) -> AgentRun:
                 run.trace_id = captured_trace_id
                 run.fault_injected = result.fault_injected
                 run.evaluation = evaluation.model_dump(mode="json")
+                run.recovery_evaluation = recovery.model_dump(mode="json")
                 run.status = result.status
                 run.output = result.output
                 run.error = result.error
