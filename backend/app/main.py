@@ -15,6 +15,10 @@ from app.models import AgentRun, Experiment
 from app.schemas import ExperimentDraft, ExperimentRead, ExperimentValidation, RunRead, RunRequest
 from app.execution import start_run
 from app.telemetry import configure_tracing, shutdown_tracing
+from app.benchmark import read_benchmark, run_benchmark
+from app.benchmark_schemas import BenchmarkDetail, BenchmarkRead, BenchmarkRequest
+from app.benchmark_suite import suite_definition
+from app.models import Benchmark
 
 logger = logging.getLogger(__name__)
 
@@ -105,3 +109,29 @@ def list_runs(
         raise HTTPException(404, "Experiment not found")
     return list(session.scalars(select(AgentRun).where(AgentRun.experiment_id == experiment_id)
                                .order_by(AgentRun.started_at.desc(), AgentRun.id.desc()).limit(limit)))
+
+
+@app.get("/benchmark-suites")
+def list_benchmark_suites() -> list[dict]:
+    return [suite_definition()]
+
+
+@app.post("/benchmarks", response_model=BenchmarkDetail, status_code=201)
+def create_benchmark(request: BenchmarkRequest, session: DatabaseSession) -> BenchmarkDetail:
+    benchmark_id = run_benchmark(request, session)
+    return read_benchmark(benchmark_id, session)
+
+
+@app.get("/benchmarks", response_model=list[BenchmarkRead])
+def list_benchmarks(
+    session: DatabaseSession,
+    limit: Annotated[int, Query(ge=1, le=100)] = 20,
+    offset: Annotated[int, Query(ge=0)] = 0,
+) -> list[Benchmark]:
+    return list(session.scalars(select(Benchmark).order_by(Benchmark.started_at.desc(), Benchmark.id.desc())
+                               .limit(limit).offset(offset)))
+
+
+@app.get("/benchmarks/{benchmark_id}", response_model=BenchmarkDetail)
+def get_benchmark(benchmark_id: UUID, session: DatabaseSession) -> BenchmarkDetail:
+    return read_benchmark(benchmark_id, session)

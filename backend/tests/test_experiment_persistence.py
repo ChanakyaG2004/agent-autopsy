@@ -1,4 +1,3 @@
-import os
 from pathlib import Path
 from uuid import uuid4
 
@@ -6,56 +5,13 @@ import pytest
 from alembic import command
 from alembic.config import Config
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine, event
-from sqlalchemy.engine import make_url
+from sqlalchemy import event
 from sqlalchemy.exc import IntegrityError, OperationalError
 from sqlalchemy.orm import Session
 
 from app.database import get_session
 from app.main import app
 from app.models import Experiment
-
-
-@pytest.fixture(scope="module")
-def test_engine():
-    url = os.environ.get(
-        "TEST_DATABASE_URL",
-        "postgresql+psycopg://agent_autopsy:agent_autopsy@127.0.0.1:55432/agent_autopsy_test",
-    )
-    assert make_url(url).database.endswith("_test"), "Use a dedicated _test database"
-    engine = create_engine(url, connect_args={"connect_timeout": 3})
-    config = Config(str(Path(__file__).resolve().parents[1] / "alembic.ini"))
-    with engine.begin() as connection:
-        config.attributes["connection"] = connection
-        command.upgrade(config, "head")
-    yield engine
-    engine.dispose()
-
-
-@pytest.fixture
-def database_connection(test_engine):
-    with test_engine.connect() as connection:
-        transaction = connection.begin()
-        yield connection
-        transaction.rollback()
-
-
-@pytest.fixture
-def client(database_connection):
-    def override_session():
-        with Session(
-            database_connection,
-            expire_on_commit=False,
-            join_transaction_mode="create_savepoint",
-        ) as session:
-            yield session
-
-    app.dependency_overrides[get_session] = override_session
-    try:
-        with TestClient(app) as test_client:
-            yield test_client
-    finally:
-        app.dependency_overrides.pop(get_session, None)
 
 
 def draft(name="Refund baseline"):
@@ -441,7 +397,7 @@ def test_downgrade_refuses_to_erase_fault_or_recovery_history(test_engine, mode,
                 with connection.begin_nested():
                     command.downgrade(config, "f348e0530e98")
             assert connection.scalar(select(AgentRun.scenario).where(AgentRun.id == run_id)) == scenario
-            assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "c0b22d930094"
+            assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "cf13a9502ab7"
         finally:
             transaction.rollback()
 
@@ -515,7 +471,7 @@ def test_downgrade_refuses_to_erase_permission_or_policy_evidence(test_engine, s
             config.attributes["connection"] = connection
             with pytest.raises(IntegrityError), connection.begin_nested():
                 command.downgrade(config, "ea25a4b836bf")
-            assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "c0b22d930094"
+            assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "cf13a9502ab7"
         finally:
             transaction.rollback()
 
@@ -532,6 +488,6 @@ def test_empty_policy_migration_round_trip(test_engine):
             config.attributes["connection"] = connection
             command.downgrade(config, "ea25a4b836bf")
             command.upgrade(config, "head")
-            assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "c0b22d930094"
+            assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "cf13a9502ab7"
         finally:
             transaction.rollback()

@@ -2,7 +2,7 @@
 
 import logging
 from datetime import datetime, timezone
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from fastapi import HTTPException
 from sqlalchemy import update
@@ -19,7 +19,7 @@ from app.telemetry import mark_failure, set_json, span, trace_id
 logger = logging.getLogger(__name__)
 
 
-def start_run(experiment_id: UUID, mode: str, session: Session) -> AgentRun:
+def start_run(experiment_id: UUID, mode: str, session: Session, *, run_id: UUID | None = None) -> AgentRun:
     # Validate configuration before claiming the experiment or doing paid work.
     with session.begin():
         experiment = session.get(Experiment, experiment_id)
@@ -29,6 +29,7 @@ def start_run(experiment_id: UUID, mode: str, session: Session) -> AgentRun:
                 or experiment.scenarios[0] not in {"normal", "timeout_after_commit", "permission_denied"}):
             raise HTTPException(409, "Execution supports refund-v1 with exactly one scenario: normal, timeout_after_commit, or permission_denied.")
         scenario = experiment.scenarios[0]
+        agent_version = experiment.agent_version
     try:
         driver, model_name = make_driver(mode)
     except ProviderNotConfigured as exc:
@@ -43,14 +44,15 @@ def start_run(experiment_id: UUID, mode: str, session: Session) -> AgentRun:
             if not claimed:
                 raise HTTPException(409, "This experiment already has a running execution.")
             state = RefundSandbox().snapshot()
-            run = AgentRun(experiment_id=experiment_id, mode=mode, scenario=scenario, model_name=model_name,
+            run = AgentRun(id=run_id or uuid4(), experiment_id=experiment_id, mode=mode, scenario=scenario, model_name=model_name,
                            status="running", task=TASK, initial_state=state, final_state=state)
             session.add(run)
             session.flush()
             session.refresh(run)
+            captured_run_id = str(run.id)
         with span("agent.run", "AGENT", **{
-            "agent.run_id": str(run.id), "agent.experiment_id": str(experiment_id),
-            "agent.mode": mode, "agent.version": experiment.agent_version,
+            "agent.run_id": captured_run_id, "agent.experiment_id": str(experiment_id),
+            "agent.mode": mode, "agent.version": agent_version,
             "agent.scenario": scenario,
         }) as run_span:
             captured_trace_id = trace_id(run_span)

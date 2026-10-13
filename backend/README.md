@@ -4,13 +4,13 @@ The FastAPI application validates configurations, saves experiments, and execute
 
 The [timeout-after-commit walkthrough](../docs/timeout-after-commit.md) explains one-shot response loss, unknown outcomes, and the separate recovery demo. The [permission and policy walkthrough](../docs/permission-and-policy.md) adds definitive denial and independent trajectory grading. Multi-scenario execution remains unsupported.
 
-Each new execution receives a versioned deterministic ledger evaluation, independent of execution status and final answer text. See [refund evaluation](../docs/refund-evaluation.md) for checks, evidence validation, and the deliberately incorrect claim-only demo.
+Each new execution receives versioned deterministic ledger and recovery-policy evaluations, independent of execution status. Final-answer wording is not graded. See [refund evaluation](../docs/refund-evaluation.md) for checks, evidence validation, and the deliberately incorrect claim-only demo.
 
 Tracing is opt-in. See [Phoenix tracing setup and design](../docs/phoenix-tracing.md) to start the local collector, enable export, and inspect normal/error traces. Application PostgreSQL remains independent of Phoenix's local trace store.
 
-This application will own request validation, application data, agent execution, benchmark execution, and evaluation. The agent runner will remain separate from HTTP handlers so a local command and, eventually, a worker can invoke the same logic.
+This application owns request validation, application data, agent execution, bounded scripted benchmark execution, and deterministic evaluation. The agent runner will remain separate from HTTP handlers so a local command and, eventually, a worker can invoke the same logic.
 
-Application PostgreSQL will store benchmark definitions and experiment results. Phoenix will receive execution telemetry. Results will reference their traces by ID.
+Application PostgreSQL stores benchmark definition snapshots, planned items, and experiment results. Phoenix will receive execution telemetry. Results will reference their traces by ID.
 
 ## Run locally
 
@@ -56,6 +56,9 @@ Optional real model mode uses `OPENAI_API_KEY` and `OPENAI_MODEL` in the backend
 - `app/execution.py`: atomic run claim, short database transactions, execution orchestration.
 - `app/evaluation.py`: strict evidence schema, independent fixed expectation, pure deterministic evaluator, and typed verdict/checks.
 - `app/recovery.py`: versioned trajectory checks for verification reads, denied writes, final response presence, and evidence compatibility.
+- `app/benchmark.py`: bounded sequential suite execution, independent aggregate counts, item-result recovery, report retrieval, and CLI.
+- `app/benchmark_suite.py`: server-owned suite and reproducibility manifest fingerprints.
+- `app/benchmark_schemas.py`: benchmark requests, persisted report contracts, and separate count fields.
 - `app/telemetry.py`: owned tracer provider, OpenInference span attributes, bounded background OTLP/HTTP export, and lifecycle shutdown.
 - `app/schemas.py`: typed HTTP request and response contracts.
 - `alembic.ini` and `migrations/`: explicit versioned database schema changes.
@@ -63,6 +66,8 @@ Optional real model mode uses `OPENAI_API_KEY` and `OPENAI_MODEL` in the backend
 - `scripts/start-phoenix.sh` and `scripts/phoenix_http.py`: optional local Phoenix service with persistent ignored storage and only an HTTP listener.
 - `scripts/trace_failure.py`: explicitly tagged rejected-tool diagnostic, without application database writes.
 - `tests/test_experiment_validation.py`: checks the request boundary, including invalid values and local browser access.
+- `tests/conftest.py`: shared isolated PostgreSQL fixtures and request-session overrides.
+- `tests/test_benchmarks.py`: benchmark matrix, progress visibility, repetitions, snapshots, partial failures, evidence retention, and database boundaries.
 - `tests/test_experiment_persistence.py`: real PostgreSQL integration tests, with a separate test database and rolled-back transactions.
 - `tests/test_agent.py`: runner limits, tool safety, state evidence, and mocked provider behavior.
 - `tests/test_telemetry.py`: trace hierarchy, model/demo distinction, selected attribute capture, and exporter failure isolation.
@@ -79,7 +84,7 @@ uv run --env-file .env pytest
 uv run --env-file .env alembic check
 ```
 
-The PostgreSQL service and dedicated `_test` database must be available for persistence tests. Migration setup is automatic. Most cases roll back their data; the two-connection concurrency test commits its fixture and explicitly cleans it up. No SQLite substitution is used.
+The PostgreSQL service and dedicated `_test` database must be available for persistence tests. Migration setup is automatic. Most cases roll back their data; the two-connection concurrency and benchmark-progress tests commit their fixtures and explicitly clean them up. No SQLite substitution is used.
 
 To stop only this local cluster, from the repository root:
 
@@ -89,3 +94,13 @@ To stop only this local cluster, from the repository root:
 
 See [the persistence walkthrough](../docs/experiment-persistence.md) for transactions, schema decisions, failure semantics, and migrations.
 See [the execution walkthrough](../docs/agent-execution.md) for run lifecycle, provider boundaries, and crash limitations.
+
+## Scripted benchmarks
+
+See [the benchmark runner walkthrough](../docs/benchmark-runner.md). `GET /benchmark-suites` lists the single supported suite. `POST /benchmarks` accepts `{"repetitions":1}` and synchronously collects nine scripted executions. GET listing and UUID detail routes retain summary, manifest, and per-run evidence. No live model is selected by this suite.
+
+```bash
+uv run --env-file .env python -m app.benchmark --repetitions 1
+```
+
+One distinct task is exercised across three scenarios and three scripted drivers. Repetitions are bounded to 1–3; more repetitions do not create new tasks. Collection status is separate from agent and evaluation outcomes. Interrupted suites have no automatic resume yet. The full application walkthrough is deferred; automated regression checks continue during implementation.

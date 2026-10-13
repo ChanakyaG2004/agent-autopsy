@@ -1,7 +1,7 @@
 from datetime import datetime
 from uuid import UUID, uuid4
 
-from sqlalchemy import Boolean, CheckConstraint, DateTime, ForeignKey, String, Text, func, text
+from sqlalchemy import Boolean, CheckConstraint, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint, func, text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -59,3 +59,44 @@ class AgentRun(Base):
     final_state: Mapped[dict] = mapped_column(JSONB)
     started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class Benchmark(Base):
+    __tablename__ = "benchmarks"
+    __table_args__ = (
+        CheckConstraint("status IN ('running', 'completed', 'failed')", name="benchmark_status"),
+        CheckConstraint("jsonb_typeof(manifest) = 'object'", name="benchmark_manifest_object"),
+        CheckConstraint("jsonb_typeof(summary) = 'object'", name="benchmark_summary_object"),
+    )
+
+    id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
+    suite_version: Mapped[str] = mapped_column(String(80))
+    status: Mapped[str] = mapped_column(String(16))
+    manifest: Mapped[dict] = mapped_column(JSONB)
+    summary: Mapped[dict] = mapped_column(JSONB)
+    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), index=True)
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class BenchmarkItem(Base):
+    __tablename__ = "benchmark_items"
+    __table_args__ = (
+        UniqueConstraint("benchmark_id", "position", name="benchmark_item_position"),
+        UniqueConstraint("benchmark_id", "case_key", "mode", "repetition", name="benchmark_item_cell"),
+        CheckConstraint("status IN ('pending', 'running', 'completed', 'failed')", name="benchmark_item_status"),
+        CheckConstraint("mode IN ('demo', 'demo_reconcile', 'demo_claim_only')", name="benchmark_item_mode"),
+        CheckConstraint("repetition BETWEEN 1 AND 3 AND position >= 0", name="benchmark_item_bounds"),
+        CheckConstraint("status <> 'completed' OR run_id IS NOT NULL", name="benchmark_item_result"),
+        CheckConstraint("run_id IS NULL OR (run_id = id AND status IN ('completed', 'failed'))", name="benchmark_item_run_identity"),
+    )
+
+    id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
+    benchmark_id: Mapped[UUID] = mapped_column(ForeignKey("benchmarks.id"), index=True)
+    experiment_id: Mapped[UUID] = mapped_column(ForeignKey("experiments.id"))
+    run_id: Mapped[UUID | None] = mapped_column(ForeignKey("agent_runs.id"), unique=True)
+    position: Mapped[int] = mapped_column(Integer)
+    case_key: Mapped[str] = mapped_column(String(80))
+    mode: Mapped[str] = mapped_column(String(16))
+    repetition: Mapped[int] = mapped_column(Integer)
+    status: Mapped[str] = mapped_column(String(16))
+    error: Mapped[str | None] = mapped_column(Text)
