@@ -12,6 +12,7 @@ from app.agent import TASK, execute_agent
 from app.evaluation import evaluate_refund, unavailable_evaluation
 from app.recovery import evaluate_recovery, unavailable_recovery
 from app.models import AgentRun, Experiment
+from app.model_telemetry import ModelTelemetry
 from app.providers import ProviderNotConfigured, make_driver
 from app.tools import RefundSandbox
 from app.telemetry import mark_failure, set_json, span, trace_id
@@ -58,6 +59,16 @@ def start_run(experiment_id: UUID, mode: str, session: Session, *, run_id: UUID 
             captured_trace_id = trace_id(run_span)
             set_json(run_span, "input", {"task": TASK})
             result = execute_agent(driver, scenario=scenario)
+            try:
+                candidate = getattr(driver, "model_telemetry", None)
+                model_telemetry = candidate if mode == "openai" and isinstance(candidate, ModelTelemetry) else None
+            except Exception as exc:
+                logger.error("Model telemetry unavailable: %s", type(exc).__name__)
+                model_telemetry = None
+            if model_telemetry is not None:
+                run_span.set_attribute("agent.model_requests", model_telemetry.attempted_requests)
+                run_span.set_attribute("agent.usage_complete", model_telemetry.usage_complete)
+                run_span.set_attribute("agent.reported_usage_requests", model_telemetry.reported_usage_requests)
             run_span.set_attribute("agent.fault_injected", result.fault_injected)
             try:
                 with span("evaluation.refund", "EVALUATOR", **{
@@ -104,6 +115,7 @@ def start_run(experiment_id: UUID, mode: str, session: Session, *, run_id: UUID 
                 run.fault_injected = result.fault_injected
                 run.evaluation = evaluation.model_dump(mode="json")
                 run.recovery_evaluation = recovery.model_dump(mode="json")
+                run.model_telemetry = model_telemetry.model_dump(mode="json") if model_telemetry else None
                 run.status = result.status
                 run.output = result.output
                 run.error = result.error

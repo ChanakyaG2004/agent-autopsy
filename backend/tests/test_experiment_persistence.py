@@ -4,6 +4,7 @@ from uuid import uuid4
 import pytest
 from alembic import command
 from alembic.config import Config
+from alembic.script import ScriptDirectory
 from fastapi.testclient import TestClient
 from sqlalchemy import event
 from sqlalchemy.exc import IntegrityError, OperationalError
@@ -293,6 +294,7 @@ def test_historical_run_is_not_silently_evaluated(client, database_connection):
     runs = client.get(f'/experiments/{experiment["id"]}/runs').json()
     assert runs[0]["evaluation"] is None
     assert runs[0]["recovery_evaluation"] is None
+    assert runs[0]["model_telemetry"] is None
 
 
 def test_database_rejects_scalar_evaluation(database_connection):
@@ -397,7 +399,7 @@ def test_downgrade_refuses_to_erase_fault_or_recovery_history(test_engine, mode,
                 with connection.begin_nested():
                     command.downgrade(config, "f348e0530e98")
             assert connection.scalar(select(AgentRun.scenario).where(AgentRun.id == run_id)) == scenario
-            assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "cf13a9502ab7"
+            assert connection.scalar(text("SELECT version_num FROM alembic_version")) == ScriptDirectory.from_config(config).get_current_head()
         finally:
             transaction.rollback()
 
@@ -471,7 +473,7 @@ def test_downgrade_refuses_to_erase_permission_or_policy_evidence(test_engine, s
             config.attributes["connection"] = connection
             with pytest.raises(IntegrityError), connection.begin_nested():
                 command.downgrade(config, "ea25a4b836bf")
-            assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "cf13a9502ab7"
+            assert connection.scalar(text("SELECT version_num FROM alembic_version")) == ScriptDirectory.from_config(config).get_current_head()
         finally:
             transaction.rollback()
 
@@ -488,6 +490,6 @@ def test_empty_policy_migration_round_trip(test_engine):
             config.attributes["connection"] = connection
             command.downgrade(config, "ea25a4b836bf")
             command.upgrade(config, "head")
-            assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "cf13a9502ab7"
+            assert connection.scalar(text("SELECT version_num FROM alembic_version")) == ScriptDirectory.from_config(config).get_current_head()
         finally:
             transaction.rollback()

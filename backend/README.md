@@ -39,7 +39,7 @@ Use Python 3.11 or newer. `uv sync` creates a project-local `.venv` and installs
 
 Open http://127.0.0.1:8000/docs. `POST /experiments` saves a draft; GET listing and UUID retrieval load records. `POST /experiments/{id}/runs` synchronously executes with mode `demo` (baseline), `demo_reconcile` (scripted recovery), `demo_claim_only` (negative control), or configured `openai`. Scenario comes from the saved experiment, not a run-request override. GET run history defaults to 10 records, bounded at 20. Created runs return 201 even for failed executions; inspect `status`, `evaluation.verdict`, `recovery_evaluation.verdict`, `scenario`, and `fault_injected`. The validation-only endpoint remains available. `/` returns 404.
 
-Optional real model mode uses `OPENAI_API_KEY` and `OPENAI_MODEL` in the backend environment. Choose a model that supports Responses function calling. Do not put the key in frontend environment variables. Real model requests can incur provider charges. No key is needed for the demo. The OpenAI adapter is tested with mocked SDK responses; live model behavior is not yet verified.
+Optional real model mode uses `OPENAI_API_KEY` and `OPENAI_MODEL` in the backend environment. Choose a model that supports Responses function calling. Do not put the key in frontend environment variables. Real model requests can incur provider charges. No key is needed for the demo. The OpenAI adapter is tested with the installed SDK over mocked HTTP transport; live model behavior is not yet verified. [Model telemetry and validation](../docs/model-telemetry.md) explains per-request usage, partial aggregates, timing, and the explicit live-validation command.
 
 ## Files
 
@@ -59,6 +59,8 @@ Optional real model mode uses `OPENAI_API_KEY` and `OPENAI_MODEL` in the backend
 - `app/benchmark.py`: bounded sequential suite execution, independent aggregate counts, item-result recovery, report retrieval, and CLI.
 - `app/benchmark_suite.py`: server-owned suite and reproducibility manifest fingerprints.
 - `app/benchmark_schemas.py`: benchmark requests, persisted report contracts, and separate count fields.
+- `app/model_telemetry.py`: strict token measurement contracts, usage validation, coverage, and known-subtotal aggregation.
+- `app/validate_model.py`: configuration-only preflight and an explicit bounded model-backed validation command.
 - `app/telemetry.py`: owned tracer provider, OpenInference span attributes, bounded background OTLP/HTTP export, and lifecycle shutdown.
 - `app/schemas.py`: typed HTTP request and response contracts.
 - `alembic.ini` and `migrations/`: explicit versioned database schema changes.
@@ -70,6 +72,7 @@ Optional real model mode uses `OPENAI_API_KEY` and `OPENAI_MODEL` in the backend
 - `tests/test_benchmarks.py`: benchmark matrix, progress visibility, repetitions, snapshots, partial failures, evidence retention, and database boundaries.
 - `tests/test_experiment_persistence.py`: real PostgreSQL integration tests, with a separate test database and rolled-back transactions.
 - `tests/test_agent.py`: runner limits, tool safety, state evidence, and mocked provider behavior.
+- `tests/test_model_telemetry.py`: installed-SDK HTTP behavior, measured usage/timing, error privacy, durable measurements, and explicit validation boundaries.
 - `tests/test_telemetry.py`: trace hierarchy, model/demo distinction, selected attribute capture, and exporter failure isolation.
 - `tests/test_evaluation.py`: correct/incorrect ledger cases, malformed evidence, fixed-oracle checks, and deterministic behavior.
 - `tests/test_recovery_policy.py`: denial boundaries, independent grades, malformed evidence, blind retries, and verification counterexamples.
@@ -104,3 +107,14 @@ uv run --env-file .env python -m app.benchmark --repetitions 1
 ```
 
 One distinct task is exercised across three scenarios and three scripted drivers. Repetitions are bounded to 1–3; more repetitions do not create new tasks. Collection status is separate from agent and evaluation outcomes. Interrupted suites have no automatic resume yet. The full application walkthrough is deferred; automated regression checks continue during implementation.
+
+## Model validation
+
+```bash
+# Checks only key/model presence; no provider or database request.
+uv run --env-file .env python -m app.validate_model
+# Explicitly makes potentially billable requests for one saved experiment.
+uv run --env-file .env python -m app.validate_model --execute --scenario normal
+```
+
+`RunRead.model_telemetry` is null for scripted and historical runs. OpenAI runs record requested/reported model, request settings and fingerprints, per-attempt timing/status/usage, and coverage-aware known usage. Usage missing after a timeout is unknown, not zero. No dollar cost is estimated. Live activation is pending credentials and model configuration; the full application walkthrough remains deferred.

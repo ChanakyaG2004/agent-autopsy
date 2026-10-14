@@ -3,6 +3,7 @@ from uuid import uuid4
 import pytest
 from alembic import command
 from alembic.config import Config
+from alembic.script import ScriptDirectory
 from pathlib import Path
 from sqlalchemy import func, select, text
 from sqlalchemy.exc import IntegrityError
@@ -283,7 +284,7 @@ def test_downgrade_refuses_to_discard_benchmark_history(client, database_connect
     config.attributes["connection"] = database_connection
     with pytest.raises(IntegrityError), database_connection.begin_nested():
         command.downgrade(config, "c0b22d930094")
-    assert database_connection.scalar(text("SELECT version_num FROM alembic_version")) == "cf13a9502ab7"
+    assert database_connection.scalar(text("SELECT version_num FROM alembic_version")) == ScriptDirectory.from_config(config).get_current_head()
     assert client.get(f'/benchmarks/{report["id"]}').json() == report
 
 
