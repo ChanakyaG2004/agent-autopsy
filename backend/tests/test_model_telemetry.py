@@ -274,14 +274,14 @@ def test_validation_preflight_never_opens_a_database_or_calls_the_model(monkeypa
     def forbidden(*args, **kwargs):
         raise AssertionError("Preflight must not execute")
     monkeypatch.setattr(validate_model, "Session", forbidden)
-    assert validate_model.main([]) == 2
+    assert validate_model.main(["--provider", "openai"]) == 2
     report = json.loads(capsys.readouterr().out)
     assert not report["executed"] and not report["ready"]
-    assert validate_model.main(["--execute"]) == 2
+    assert validate_model.main(["--provider", "openai", "--execute"]) == 2
     assert not json.loads(capsys.readouterr().out)["executed"]
     monkeypatch.setenv("OPENAI_API_KEY", "secret-only-in-environment")
     monkeypatch.setenv("OPENAI_MODEL", "test-model")
-    assert validate_model.main([]) == 0
+    assert validate_model.main(["--provider", "openai"]) == 0
     output = capsys.readouterr().out
     assert json.loads(output)["ready"] and "secret-only" not in output
 
@@ -291,7 +291,7 @@ def test_explicit_validation_command_uses_the_existing_runner(database_connectio
     from app import validate_model
     monkeypatch.setattr(validate_model, "Session", lambda *args, **kwargs: Session(
         database_connection, expire_on_commit=False, join_transaction_mode="create_savepoint"))
-    assert validate_model.main(["--execute", "--scenario", scenario]) == 0
+    assert validate_model.main(["--provider", "openai", "--execute", "--scenario", scenario]) == 0
     report = json.loads(capsys.readouterr().out)
     assert report["passed"] and all(report["checks"].values())
     assert report["scenario"] == scenario
@@ -304,7 +304,7 @@ def test_validation_does_not_pass_when_provider_usage_is_missing(database_connec
     simulated_provider[1]["missing_usage_at"] = 1
     monkeypatch.setattr(validate_model, "Session", lambda *args, **kwargs: Session(
         database_connection, expire_on_commit=False, join_transaction_mode="create_savepoint"))
-    assert validate_model.main(["--execute"]) == 1
+    assert validate_model.main(["--provider", "openai", "--execute"]) == 1
     report = json.loads(capsys.readouterr().out)
     assert not report["passed"] and not report["checks"]["usage_available_for_every_attempt"]
     assert report["execution_status"] == "completed" and report["ledger_verdict"] == "passed"

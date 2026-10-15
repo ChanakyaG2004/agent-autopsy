@@ -1,7 +1,9 @@
-# Model request measurements and live validation
+# OpenAI request measurements and validation (earlier checkpoint)
+
+The subsequent [local Ollama checkpoint](ollama-local.md) adds key-free native execution and actual local validation. This document describes the optional OpenAI path.
 
 This checkpoint implements the measurement and validation tooling for release
-milestone two. **A successful real-provider validation has not yet been recorded.**
+milestone two. **A successful real OpenAI validation has not yet been recorded.**
 The backend API key and model were absent when implementation began. Automated
 tests use the installed OpenAI SDK with mocked HTTP, not paid provider calls.
 
@@ -148,10 +150,10 @@ variables. Start from the example if a local file does not already exist:
 cd backend
 cp -n .env.example .env
 # Edit .env locally to set OPENAI_API_KEY and OPENAI_MODEL.
-uv run --env-file .env python -m app.validate_model
+uv run --env-file .env python -m app.validate_model --provider openai
 ```
 
-Default invocation only checks whether key and model are nonempty. It does not
+Invocation with `--provider openai` and no `--execute` only checks whether key and model are nonempty. It does not
 contact the provider or database and cannot confirm account access, billing, or
 model availability. It prints booleans, not credentials. Missing configuration
 exits 2, including when `--execute` was requested, before creating a record.
@@ -159,14 +161,14 @@ exits 2, including when `--execute` was requested, before creating a record.
 An explicit execution makes potentially billable requests for one scenario:
 
 ```bash
-uv run --env-file .env python -m app.validate_model --execute --scenario normal
+uv run --env-file .env python -m app.validate_model --provider openai --execute --scenario normal
 ```
 
 The two fault scenarios can be validated separately later:
 
 ```bash
-uv run --env-file .env python -m app.validate_model --execute --scenario timeout_after_commit
-uv run --env-file .env python -m app.validate_model --execute --scenario permission_denied
+uv run --env-file .env python -m app.validate_model --provider openai --execute --scenario timeout_after_commit
+uv run --env-file .env python -m app.validate_model --provider openai --execute --scenario permission_denied
 ```
 
 Apply migrations first. Set tracing enabled and start Phoenix when an exported
@@ -190,7 +192,7 @@ differences, safe persistence, root/LLM trace attributes, CLI preflight/executio
 boundaries, historical nulls, and downgrade protection. The SDK transport is
 mocked in those tests and PostgreSQL is real and isolated.
 
-The application walkthrough remains deferred. Actual provider access, live model
-behavior, observed live token usage, and a live-model Phoenix trace remain pending
+The application walkthrough remains deferred. Actual OpenAI provider access, live OpenAI model
+behavior, observed OpenAI token usage, and an OpenAI-model Phoenix trace remain pending
 until the backend credentials and chosen model are configured and the explicit
 validation is run. This is the remaining activation step for milestone two.

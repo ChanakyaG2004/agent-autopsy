@@ -1,7 +1,7 @@
 import { isRefundEvaluation, type RefundEvaluation } from "@/lib/evaluation";
 import { isRecoveryEvaluation, type RecoveryEvaluation } from "@/lib/recovery";
 
-export type ExecutionMode = "demo" | "demo_claim_only" | "demo_reconcile" | "openai";
+export type ExecutionMode = "demo" | "demo_claim_only" | "demo_reconcile" | "openai" | "ollama";
 
 export interface AgentRun {
   id: string;
@@ -42,7 +42,7 @@ export function isAgentRun(value: unknown): value is AgentRun {
   return typeof value.id === "string" && uuid.test(value.id) &&
     typeof value.experiment_id === "string" && uuid.test(value.experiment_id) &&
     ["running", "completed", "failed"].includes(String(value.status)) &&
-    (value.mode === "demo" || value.mode === "demo_claim_only" || value.mode === "demo_reconcile" || value.mode === "openai") &&
+    (value.mode === "demo" || value.mode === "demo_claim_only" || value.mode === "demo_reconcile" || value.mode === "openai" || value.mode === "ollama") &&
     (value.scenario === "normal" || value.scenario === "timeout_after_commit" || value.scenario === "permission_denied") &&
     typeof value.fault_injected === "boolean" &&
     (value.model_name === null || typeof value.model_name === "string") &&

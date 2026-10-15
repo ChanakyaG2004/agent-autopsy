@@ -39,7 +39,7 @@ class ExperimentRead(ExperimentDraft):
 
 class RunRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    mode: Literal["demo", "demo_claim_only", "demo_reconcile", "openai"] = "demo"
+    mode: Literal["demo", "demo_claim_only", "demo_reconcile", "openai", "ollama"] = "demo"
 
 
 class RunRead(BaseModel):
@@ -47,7 +47,7 @@ class RunRead(BaseModel):
     id: UUID
     experiment_id: UUID
     status: Literal["running", "completed", "failed"]
-    mode: Literal["demo", "demo_claim_only", "demo_reconcile", "openai"]
+    mode: Literal["demo", "demo_claim_only", "demo_reconcile", "openai", "ollama"]
     scenario: Scenario
     fault_injected: bool
     model_name: str | None

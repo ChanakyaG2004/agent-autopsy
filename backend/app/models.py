@@ -34,12 +34,12 @@ class AgentRun(Base):
     __tablename__ = "agent_runs"
     __table_args__ = (
         CheckConstraint("status IN ('running', 'completed', 'failed')", name="run_status"),
-        CheckConstraint("mode IN ('demo', 'demo_claim_only', 'demo_reconcile', 'openai')", name="run_mode"),
+        CheckConstraint("mode IN ('demo', 'demo_claim_only', 'demo_reconcile', 'openai', 'ollama')", name="run_mode"),
         CheckConstraint("scenario IN ('normal', 'timeout_after_commit', 'permission_denied')", name="run_scenario"),
         CheckConstraint("NOT fault_injected OR scenario IN ('timeout_after_commit', 'permission_denied')", name="run_fault_scenario"),
         CheckConstraint("evaluation IS NULL OR jsonb_typeof(evaluation) = 'object'", name="run_evaluation_object"),
         CheckConstraint("recovery_evaluation IS NULL OR jsonb_typeof(recovery_evaluation) = 'object'", name="run_recovery_object"),
-        CheckConstraint("model_telemetry IS NULL OR (mode = 'openai' AND jsonb_typeof(model_telemetry) = 'object')", name="run_model_telemetry_object"),
+        CheckConstraint("model_telemetry IS NULL OR (mode IN ('openai', 'ollama') AND jsonb_typeof(model_telemetry) = 'object')", name="run_model_telemetry_object"),
     )
 
     id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)

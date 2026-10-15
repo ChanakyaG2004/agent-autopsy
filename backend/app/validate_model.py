@@ -4,6 +4,7 @@ import argparse
 import json
 import os
 
+from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
 from app.database import engine
@@ -13,7 +14,14 @@ from app.schemas import RunRead
 from app.telemetry import configure_tracing, shutdown_tracing
 
 
-def configuration_status() -> dict:
+def configuration_status(provider: str = "ollama") -> dict:
+    if provider == "ollama":
+        from app.ollama_provider import OllamaUnavailable, settings
+        try:
+            settings()
+            return {"model_configured": True, "local_endpoint_valid": True}
+        except OllamaUnavailable:
+            return {"model_configured": False, "local_endpoint_valid": False}
     return {"key_configured": bool(os.environ.get("OPENAI_API_KEY", "").strip()),
             "model_configured": bool(os.environ.get("OPENAI_MODEL", "").strip())}
 
@@ -46,15 +54,17 @@ def validation_report(run: RunRead) -> dict:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Check backend model configuration, or explicitly execute one validation run.")
-    parser.add_argument("--execute", action="store_true", help="Make potentially billable model requests and persist a validation run")
+    parser.add_argument("--provider", choices=["ollama", "openai"], default="ollama")
+    parser.add_argument("--execute", action="store_true", help="Execute and persist one model-backed run (OpenAI can incur charges)")
     parser.add_argument("--scenario", choices=["normal", "timeout_after_commit", "permission_denied"], default="normal")
     args = parser.parse_args(argv)
-    configured = configuration_status()
+    configured = configuration_status(args.provider)
     ready = all(configured.values())
     if not args.execute or not ready:
-        print(json.dumps({"configuration": configured, "ready": ready, "executed": False,
+        print(json.dumps({"provider": args.provider, "key_required": args.provider == "openai",
+                          "configuration": configured, "ready": ready, "executed": False,
                           "message": "Use --execute for one model-backed run." if ready else
-                          "Set OPENAI_API_KEY and OPENAI_MODEL in the backend environment. No request was made."}, indent=2))
+                          "Check the selected provider's backend configuration. No request was made."}, indent=2))
         return 0 if ready else 2
     provider = configure_tracing()
     try:
@@ -64,7 +74,12 @@ def main(argv: list[str] | None = None) -> int:
                 session.add(experiment)
                 session.flush()
                 experiment_id = experiment.id
-            run = RunRead.model_validate(start_run(experiment_id, "openai", session))
+            try:
+                run = RunRead.model_validate(start_run(experiment_id, args.provider, session))
+            except HTTPException as exc:
+                print(json.dumps({"provider": args.provider, "passed": False,
+                                  "experiment_id": str(experiment_id), "detail": exc.detail}, indent=2))
+                return 2 if exc.status_code == 503 else 1
             report = validation_report(run)
             print(json.dumps(report, indent=2))
             return 0 if report["passed"] else 1

@@ -8,7 +8,7 @@ import { RecoveryPolicy } from "@/components/recovery-evaluation";
 
 export function ExperimentRunner({ experiment }: { experiment: SavedExperiment }) {
   const selectId = useId();
-  const [mode, setMode] = useState<ExecutionMode>("demo");
+  const [mode, setMode] = useState<ExecutionMode>("ollama");
   const [runs, setRuns] = useState<AgentRun[]>([]);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
@@ -47,7 +47,7 @@ export function ExperimentRunner({ experiment }: { experiment: SavedExperiment }
     try {
       const response = await fetch(`${apiBaseUrl}/experiments/${experiment.id}/runs`, {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ mode }), signal: AbortSignal.timeout(90_000),
+        body: JSON.stringify({ mode }), signal: AbortSignal.timeout(mode === "ollama" ? 390_000 : 90_000),
       });
       const body: unknown = await response.json();
       if (!response.ok) {
@@ -75,11 +75,13 @@ export function ExperimentRunner({ experiment }: { experiment: SavedExperiment }
       <label htmlFor={selectId}>Execution driver</label>
       <select id={selectId} value={mode} disabled={busy}
         onChange={(event) => setMode(event.target.value as ExecutionMode)}>
+        <option value="ollama">Ollama — local model, no API key</option>
         <option value="demo">Baseline demo — stops on tool errors</option>
         <option value="demo_reconcile">Recovery demo — verifies timeouts, respects denials</option>
         <option value="demo_claim_only">Claim-only demo — intentionally skips tools</option>
         <option value="openai">OpenAI — backend key & model required</option>
       </select>
+      {mode === "ollama" && <p>Runs a real model through your local Ollama service. No hosted inference fee or API key. The backend selects the installed model; cold starts can take longer.</p>}
       {mode === "demo_claim_only" && <p>This scripted negative control claims success without issuing a refund. Its task evaluation should fail. No LLM is used.</p>}
       {mode === "demo_reconcile" && <p>This scripted recovery policy verifies uncertain writes and stops with a final refusal after permission denial. No LLM is used.</p>}
       <p>Demo checks the execution path, not model quality. “Completed” means the loop ended normally; it is not a correctness score.</p>
@@ -95,7 +97,8 @@ export function ExperimentRunner({ experiment }: { experiment: SavedExperiment }
         <article className="run-result" key={saved.id}>
           <h3>{saved.mode === "demo" ? "Baseline demo (no LLM)" :
             saved.mode === "demo_reconcile" ? "Recovery demo (no LLM)" :
-            saved.mode === "demo_claim_only" ? "Claim-only demo (negative control, no LLM)" : `OpenAI · ${saved.model_name}`}</h3>
+            saved.mode === "demo_claim_only" ? "Claim-only demo (negative control, no LLM)" :
+            saved.mode === "ollama" ? `Ollama · ${saved.model_name}` : `OpenAI · ${saved.model_name}`}</h3>
           <p><strong>Execution:</strong> {saved.status}</p>
           <p><strong>Scenario:</strong> {saved.scenario === "normal" ? "Normal execution" : saved.scenario === "permission_denied" ? "Permission denied" : "Response lost after refund commits"}</p>
           {saved.scenario === "permission_denied" && <p className="message fault-message">

@@ -123,6 +123,15 @@ def make_driver(mode: str):
         return ClaimOnlyDemoDriver(), None
     if mode == "demo_reconcile":
         return ReconcileDemoDriver(), None
+    if mode == "ollama":
+        from app.ollama_provider import OllamaDriver, OllamaUnavailable, settings
+        try:
+            model, base_url = settings()
+            return OllamaDriver(model, base_url), model
+        except OllamaUnavailable as exc:
+            raise ProviderNotConfigured(str(exc)) from None
+    if mode != "openai":
+        raise ProviderNotConfigured("Unsupported execution mode.")
     key = os.environ.get("OPENAI_API_KEY", "").strip()
     model = os.environ.get("OPENAI_MODEL", "").strip()
     if not key or not model:

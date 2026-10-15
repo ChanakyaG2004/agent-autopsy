@@ -61,7 +61,7 @@ def start_run(experiment_id: UUID, mode: str, session: Session, *, run_id: UUID 
             result = execute_agent(driver, scenario=scenario)
             try:
                 candidate = getattr(driver, "model_telemetry", None)
-                model_telemetry = candidate if mode == "openai" and isinstance(candidate, ModelTelemetry) else None
+                model_telemetry = candidate if mode in {"openai", "ollama"} and isinstance(candidate, ModelTelemetry) else None
             except Exception as exc:
                 logger.error("Model telemetry unavailable: %s", type(exc).__name__)
                 model_telemetry = None

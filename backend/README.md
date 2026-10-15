@@ -1,6 +1,6 @@
 # Backend
 
-The FastAPI application validates configurations, saves experiments, and executes `refund-v1` with exactly one supported scenario: `normal`, `timeout_after_commit`, or `permission_denied`. Run evidence is stored in PostgreSQL. The default driver is a deterministic baseline demo, not an LLM.
+The FastAPI application validates configurations, saves experiments, and executes `refund-v1` with exactly one supported scenario: `normal`, `timeout_after_commit`, or `permission_denied`. Run evidence is stored in PostgreSQL. The API defaults to the deterministic demo when mode is omitted. The UI and validation CLI default to the local Ollama model.
 
 The [timeout-after-commit walkthrough](../docs/timeout-after-commit.md) explains one-shot response loss, unknown outcomes, and the separate recovery demo. The [permission and policy walkthrough](../docs/permission-and-policy.md) adds definitive denial and independent trajectory grading. Multi-scenario execution remains unsupported.
 
@@ -37,9 +37,9 @@ Use Python 3.11 or newer. `uv sync` creates a project-local `.venv` and installs
 
 `.env.example` documents the development and test database URLs. To use an existing PostgreSQL service, create dedicated databases and set those URLs in `.env` instead of running the bootstrap. Environment files are ignored by Git. The application also has the example development URL as a local default.
 
-Open http://127.0.0.1:8000/docs. `POST /experiments` saves a draft; GET listing and UUID retrieval load records. `POST /experiments/{id}/runs` synchronously executes with mode `demo` (baseline), `demo_reconcile` (scripted recovery), `demo_claim_only` (negative control), or configured `openai`. Scenario comes from the saved experiment, not a run-request override. GET run history defaults to 10 records, bounded at 20. Created runs return 201 even for failed executions; inspect `status`, `evaluation.verdict`, `recovery_evaluation.verdict`, `scenario`, and `fault_injected`. The validation-only endpoint remains available. `/` returns 404.
+Open http://127.0.0.1:8000/docs. `POST /experiments` saves a draft; GET listing and UUID retrieval load records. `POST /experiments/{id}/runs` synchronously executes with mode `demo` (baseline), `demo_reconcile` (scripted recovery), `demo_claim_only` (negative control), `ollama` (native local model), or configured `openai`. Scenario comes from the saved experiment, not a run-request override. GET run history defaults to 10 records, bounded at 20. Created runs return 201 even for failed executions; inspect `status`, `evaluation.verdict`, `recovery_evaluation.verdict`, `scenario`, and `fault_injected`. The validation-only endpoint remains available. `/` returns 404.
 
-Optional real model mode uses `OPENAI_API_KEY` and `OPENAI_MODEL` in the backend environment. Choose a model that supports Responses function calling. Do not put the key in frontend environment variables. Real model requests can incur provider charges. No key is needed for the demo. The OpenAI adapter is tested with the installed SDK over mocked HTTP transport; live model behavior is not yet verified. [Model telemetry and validation](../docs/model-telemetry.md) explains per-request usage, partial aggregates, timing, and the explicit live-validation command.
+Local real-model mode uses `OLLAMA_BASE_URL` and an installed tool-capable `OLLAMA_MODEL`, with no API key. See [local Ollama setup and real validation](../docs/ollama-local.md). Optional OpenAI mode uses `OPENAI_API_KEY` and `OPENAI_MODEL` in the backend environment. Choose a model that supports Responses function calling. Do not put the key in frontend environment variables. Real model requests can incur provider charges. No key is needed for the demo. The OpenAI adapter is tested with the installed SDK over mocked HTTP transport; live model behavior is not yet verified. [Model telemetry and validation](../docs/model-telemetry.md) explains per-request usage, partial aggregates, timing, and the explicit live-validation command.
 
 ## Files
 
@@ -52,7 +52,8 @@ Optional real model mode uses `OPENAI_API_KEY` and `OPENAI_MODEL` in the backend
 - `app/models.py`: experiments and agent_runs table mappings, foreign key, constraints, and indexes.
 - `app/agent.py`: driver protocol, bounded loop, unknown-outcome feedback, baseline/recovery/claim-only scripts.
 - `app/tools.py`: validated tools, isolated refund state, one-shot post-mutation response loss, and persistent pre-mutation permission denial.
-- `app/providers.py`: optional OpenAI Responses adapter and environment configuration.
+- `app/providers.py`: provider selection and optional OpenAI Responses adapter.
+- `app/ollama_provider.py`: loopback-only native local-model adapter, metadata checks, tool feedback, and measurements.
 - `app/execution.py`: atomic run claim, short database transactions, execution orchestration.
 - `app/evaluation.py`: strict evidence schema, independent fixed expectation, pure deterministic evaluator, and typed verdict/checks.
 - `app/recovery.py`: versioned trajectory checks for verification reads, denied writes, final response presence, and evidence compatibility.
@@ -72,6 +73,7 @@ Optional real model mode uses `OPENAI_API_KEY` and `OPENAI_MODEL` in the backend
 - `tests/test_benchmarks.py`: benchmark matrix, progress visibility, repetitions, snapshots, partial failures, evidence retention, and database boundaries.
 - `tests/test_experiment_persistence.py`: real PostgreSQL integration tests, with a separate test database and rolled-back transactions.
 - `tests/test_agent.py`: runner limits, tool safety, state evidence, and mocked provider behavior.
+- `tests/test_ollama_provider.py`: local-only configuration, model preflight, native calls, feedback, measurement, and persistence boundaries.
 - `tests/test_model_telemetry.py`: installed-SDK HTTP behavior, measured usage/timing, error privacy, durable measurements, and explicit validation boundaries.
 - `tests/test_telemetry.py`: trace hierarchy, model/demo distinction, selected attribute capture, and exporter failure isolation.
 - `tests/test_evaluation.py`: correct/incorrect ledger cases, malformed evidence, fixed-oracle checks, and deterministic behavior.
@@ -111,10 +113,10 @@ One distinct task is exercised across three scenarios and three scripted drivers
 ## Model validation
 
 ```bash
-# Checks only key/model presence; no provider or database request.
+# Checks local Ollama settings only; no provider or database request.
 uv run --env-file .env python -m app.validate_model
-# Explicitly makes potentially billable requests for one saved experiment.
+# Explicitly runs the installed local model for one saved experiment.
 uv run --env-file .env python -m app.validate_model --execute --scenario normal
 ```
 
-`RunRead.model_telemetry` is null for scripted and historical runs. OpenAI runs record requested/reported model, request settings and fingerprints, per-attempt timing/status/usage, and coverage-aware known usage. Usage missing after a timeout is unknown, not zero. No dollar cost is estimated. Live activation is pending credentials and model configuration; the full application walkthrough remains deferred.
+`RunRead.model_telemetry` is null for scripted and historical runs. Ollama and OpenAI runs record provider-correct requested/reported model, request settings and fingerprints, per-attempt timing/status/usage, and coverage-aware known usage. Usage missing after a timeout is unknown, not zero. No dollar cost is estimated. The local provider has passed one real validation per supported scenario; optional OpenAI activation remains pending its credentials and model. The full application walkthrough remains deferred.

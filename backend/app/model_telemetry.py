@@ -49,14 +49,18 @@ class ModelRequestConfiguration(BaseModel):
     max_turns: int
     timeout_seconds: float
     max_retries: int
-    store: bool
-    parallel_tool_calls: bool
+    store: bool | None
+    parallel_tool_calls: bool | None
+    model_digest: str | None = None
+    server_version: str | None = None
+    context_window_tokens: int | None = None
+    temperature: float | None = None
 
 
 class ModelTelemetry(BaseModel):
     model_config = ConfigDict(strict=True, extra="forbid", frozen=True)
-    telemetry_version: Literal["openai-responses-v1"] = "openai-responses-v1"
-    provider: Literal["openai"] = "openai"
+    telemetry_version: Literal["openai-responses-v1", "ollama-chat-v1"] = "openai-responses-v1"
+    provider: Literal["openai", "ollama"] = "openai"
     requested_model: str
     configuration: ModelRequestConfiguration
     attempted_requests: int = Field(ge=0)
@@ -65,6 +69,13 @@ class ModelTelemetry(BaseModel):
     known_usage: TokenUsage | None
     total_request_duration_ms: float = Field(ge=0, allow_inf_nan=False)
     requests: list[ModelRequestMeasurement]
+
+    @model_validator(mode="after")
+    def provider_matches_version(self):
+        expected = "ollama-chat-v1" if self.provider == "ollama" else "openai-responses-v1"
+        if self.telemetry_version != expected:
+            raise ValueError("Telemetry provider and version disagree")
+        return self
 
 
 def field(value, name: str):
@@ -92,7 +103,7 @@ def fingerprint(value: object) -> str:
 
 
 def summarize_requests(model: str, requests: list[ModelRequestMeasurement],
-                       configuration: ModelRequestConfiguration) -> ModelTelemetry:
+                       configuration: ModelRequestConfiguration, *, provider: str = "openai") -> ModelTelemetry:
     reported = [request.usage for request in requests if request.usage is not None]
     totals = None
     if reported:
@@ -102,6 +113,7 @@ def summarize_requests(model: str, requests: list[ModelRequestMeasurement],
             values[name] = sum(counts) if all(count is not None for count in counts) else None
         totals = TokenUsage(**values)
     return ModelTelemetry(
+        provider=provider, telemetry_version="ollama-chat-v1" if provider == "ollama" else "openai-responses-v1",
         requested_model=model, configuration=configuration, attempted_requests=len(requests), reported_usage_requests=len(reported),
         usage_complete=bool(requests) and len(reported) == len(requests), known_usage=totals,
         total_request_duration_ms=sum(request.duration_ms for request in requests),
