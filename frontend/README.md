@@ -68,6 +68,7 @@ Read [the evaluation walkthrough](../docs/refund-evaluation.md) for the three ve
 ## Checks
 
 ```bash
+npm test
 npm run lint
 npm run typecheck
 npm run build
@@ -80,3 +81,5 @@ The initial full `npm audit` reports five high-severity entries in the developme
 Try **Permission denied** with the baseline and recovery demos. Compare failed refund correctness with passed recovery policy for the safe refusal, as explained in [the permission walkthrough](../docs/permission-and-policy.md). Normal runs show recovery as not applicable; unexercised faults show not evaluable. Older runs retain their unevaluated policy history.
 
 The execution selector now defaults to **Ollama — local model, no API key**. The backend owns the loopback endpoint and installed model choice. Local model runs allow a longer request wait and retain the same refresh-before-retry behavior. OpenAI and scripted drivers remain explicit options. See [local Ollama design and validation](../docs/ollama-local.md).
+
+The `/compare` page links from the experiments page. `run-comparison-panel.tsx` reads saved choices and server-owned rules; `comparison-report.tsx` displays verdicts, measurements, changes, and evidence. `benchmark-panel.tsx` separately displays saved scripted counts and cells. Neither panel executes an agent. Runtime contracts live in `src/lib/comparisons.ts` and `src/lib/model-telemetry.ts`. `npm test` compiles contract tests into ignored `.test-build/` and uses Node’s built-in runner. See the [comparison walkthrough](../docs/run-comparisons.md).

@@ -120,3 +120,7 @@ uv run --env-file .env python -m app.validate_model --execute --scenario normal
 ```
 
 `RunRead.model_telemetry` is null for scripted and historical runs. Ollama and OpenAI runs record provider-correct requested/reported model, request settings and fingerprints, per-attempt timing/status/usage, and coverage-aware known usage. Usage missing after a timeout is unknown, not zero. No dollar cost is estimated. The local provider has passed one real validation per supported scenario; optional OpenAI activation remains pending its credentials and model. The full application walkthrough remains deferred.
+
+## Recorded comparisons
+
+`GET /runs?limit=100&offset=0` lists saved run choices joined to experiment labels. `GET /run-comparisons?baseline_id=<uuid>&candidate_id=<uuid>` returns `recorded-runs-v1`: stored results, explicit eligibility checks, configuration differences, and permitted candidate-minus-baseline deltas. Identical IDs return 422; missing runs return 404. These routes never execute or regrade runs. No schema migration is required. `app/comparisons.py` owns the rules, and `tests/test_comparisons.py` verifies eligibility, missing evidence, measurement boundaries, pagination, and read-only behavior. See the [comparison walkthrough](../docs/run-comparisons.md).

@@ -19,6 +19,7 @@ from app.benchmark import read_benchmark, run_benchmark
 from app.benchmark_schemas import BenchmarkDetail, BenchmarkRead, BenchmarkRequest
 from app.benchmark_suite import suite_definition
 from app.models import Benchmark
+from app.comparisons import RunChoice, RunComparison, compare_runs, run_choices
 
 logger = logging.getLogger(__name__)
 
@@ -135,3 +136,17 @@ def list_benchmarks(
 @app.get("/benchmarks/{benchmark_id}", response_model=BenchmarkDetail)
 def get_benchmark(benchmark_id: UUID, session: DatabaseSession) -> BenchmarkDetail:
     return read_benchmark(benchmark_id, session)
+
+
+@app.get("/runs", response_model=list[RunChoice])
+def list_recorded_runs(
+    session: DatabaseSession,
+    limit: Annotated[int, Query(ge=1, le=100)] = 50,
+    offset: Annotated[int, Query(ge=0)] = 0,
+) -> list[RunChoice]:
+    return run_choices(session, limit, offset)
+
+
+@app.get("/run-comparisons", response_model=RunComparison)
+def get_run_comparison(baseline_id: UUID, candidate_id: UUID, session: DatabaseSession) -> RunComparison:
+    return compare_runs(baseline_id, candidate_id, session)

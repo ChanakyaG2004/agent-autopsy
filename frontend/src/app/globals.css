@@ -6,6 +6,38 @@ body {
   line-height: 1.6;
 }
 
+a { color: #1d4ed8; }
+.comparison-page { max-width: 82rem; }
+.comparison-section { margin-top: 2.5rem; border-top: 1px solid #cbd5e1; padding-top: 1rem; }
+.comparison-form { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin: 1.5rem 0; }
+.comparison-form label, .benchmark-select { display: block; min-width: 0; font-weight: bold; }
+.comparison-form select, .benchmark-select select { display: block; width: 100%; padding: 0.75rem; font: inherit; border: 1px solid #64748b; border-radius: 0.25rem; background: white; }
+.comparison-form button { grid-column: 1 / -1; }
+.secondary-button { width: auto; background: white; color: #172033; }
+.comparison-fine-print, small { font-size: 0.85rem; color: #475569; }
+.comparison-flags { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; margin-top: 1.5rem; }
+.comparison-flags > div { border: 1px solid #94a3b8; border-radius: 0.4rem; background: white; padding: 1rem; }
+.comparison-flags span, small { display: block; }
+.comparison-caution { border-left: 4px solid #b45309; background: #fffbeb; padding: 0.75rem 1rem; }
+.table-scroll { overflow-x: auto; margin: 1.5rem 0; }
+.comparison-page table { width: 100%; border-collapse: collapse; background: white; font-size: 0.9rem; }
+.comparison-page caption { text-align: left; font-size: 1rem; font-weight: bold; margin-bottom: 0.5rem; }
+.comparison-page th, .comparison-page td { text-align: left; padding: 0.8rem; border: 1px solid #cbd5e1; vertical-align: top; }
+.comparison-page thead, .comparison-page tbody th { background: #f1f5f9; }
+.comparison-page details { margin: 1rem 0; }
+.comparison-page code { overflow-wrap: anywhere; }
+.comparison-evidence-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+.comparison-evidence { min-width: 0; border: 1px solid #94a3b8; border-radius: 0.4rem; padding: 1rem; }
+.benchmark-select { margin-top: 1rem; }
+.verdict-pill { display: inline-block; border-radius: 0.3rem; padding: 0.1rem 0.4rem; background: #e2e8f0; white-space: nowrap; }
+.verdict-passed { color: #166534; background: #dcfce7; }
+.verdict-failed { color: #991b1b; background: #fee2e2; }
+.comparison-page td pre { max-width: 32rem; }
+@media (max-width: 700px) {
+  .comparison-form, .comparison-flags, .comparison-evidence-grid { grid-template-columns: 1fr; }
+  .comparison-page { padding: 0 1rem; }
+}
+
 main {
   max-width: 52rem;
   margin: 3rem auto;

@@ -1,9 +1,11 @@
 import { EvidenceItem } from "@/components/evidence-item";
 import { ExperimentForm } from "@/components/experiment-form";
+import Link from "next/link";
 
 export default function Home() {
   return (
     <main>
+      <nav aria-label="Main"><Link href="/compare">Compare saved runs and policies →</Link></nav>
       <h1>Agent Autopsy</h1>
       <p>
         Test AI agents under controlled API failures, inspect their execution

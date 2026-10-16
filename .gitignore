@@ -29,3 +29,6 @@ coverage/
 
 # macOS
 .DS_Store
+
+# Compiled frontend contract tests
+.test-build/
