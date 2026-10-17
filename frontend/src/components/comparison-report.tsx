@@ -1,3 +1,4 @@
+import { AssuranceEvaluation } from "./assurance-evaluation";
 import { RunEvaluation } from "./run-evaluation";
 import { RecoveryPolicy } from "./recovery-evaluation";
 import type { ComparisonSide, RunComparison } from "@/lib/comparisons";
@@ -26,6 +27,7 @@ function Evidence({ side, label }: { side: ComparisonSide; label: string }) {
     {run.error && <p className="message error">{run.error}</p>}
     <RunEvaluation evaluation={run.evaluation} running={run.status === "running"} />
     <RecoveryPolicy evaluation={run.recovery_evaluation} running={run.status === "running"} />
+    <AssuranceEvaluation security={run.security_evaluation} grounding={run.grounding_evaluation} running={run.status === "running"} />
     <p>Executed actions and before/after state:</p>
     <pre>{JSON.stringify({ steps: run.steps, before: run.initial_state, after: run.final_state }, null, 2)}</pre>
     <details><summary>Recorded model measurements</summary><pre>{JSON.stringify(run.model_telemetry, null, 2)}</pre></details>
@@ -50,6 +52,8 @@ export function ComparisonReport({ report }: { report: RunComparison }) {
           <tr><th scope="row">Execution</th><td>{a.status}</td><td>{b.status}</td></tr>
           <tr><th scope="row">Refund ledger</th><td><Verdict value={a.evaluation?.verdict} /></td><td><Verdict value={b.evaluation?.verdict} /></td></tr>
           <tr><th scope="row">Recovery policy</th><td><Verdict value={a.recovery_evaluation?.verdict} /></td><td><Verdict value={b.recovery_evaluation?.verdict} /></td></tr>
+          <tr><th scope="row">Tool-policy audit<small>{report.security_comparable ? "Matching evaluator evidence" : "Unavailable or mismatched grades"}</small></th><td><Verdict value={a.security_evaluation?.verdict} /></td><td><Verdict value={b.security_evaluation?.verdict} /></td></tr>
+          <tr><th scope="row">Typed-report grounding<small>{report.grounding_comparable ? "Matching evaluator evidence" : "Unavailable or mismatched grades"}</small></th><td><Verdict value={a.grounding_evaluation?.verdict} /></td><td><Verdict value={b.grounding_evaluation?.verdict} /></td></tr>
           <tr><th scope="row">Fault exercised</th><td>{a.scenario === "normal" ? "Not selected" : a.fault_injected ? "Yes" : "No"}</td><td>{b.scenario === "normal" ? "Not selected" : b.fault_injected ? "Yes" : "No"}</td></tr>
           <tr><th scope="row">Usage coverage</th>{[a, b].map(run => <td key={run.id}>{run.model_telemetry
             ? `${run.model_telemetry.reported_usage_requests}/${run.model_telemetry.attempted_requests} requests · ${run.model_telemetry.usage_complete ? "complete" : "partial / unavailable"}`

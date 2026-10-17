@@ -7,6 +7,7 @@ from typing import Any, Protocol
 
 from app.tools import RefundSandbox, ToolError, ToolResponseTimeout, ToolPermissionDenied
 from app.telemetry import set_json, span
+from app.assurance import ANSWER_INSTRUCTIONS, report_answer, reporting_turn
 
 TASK = "Refund the full paid amount for order-123, then report what happened."
 INSTRUCTIONS = (
@@ -63,6 +64,7 @@ def execute_agent(driver: Driver, scenario: str = "normal") -> RunResult:
     error = None
     try:
         for turn_number in range(1, MAX_TURNS + 1):
+            reporting = reporting_turn(history)
             with span("agent.decision", "CHAIN", **{"agent.turn": turn_number}) as decision:
                 turn = driver.decide(history)
                 decision.set_attribute("agent.requested_tools", [
@@ -78,6 +80,9 @@ def execute_agent(driver: Driver, scenario: str = "normal") -> RunResult:
                 step = {"turn": turn_number, "kind": "tool", "tool": call.name,
                         "arguments": call.arguments}
                 steps.append(step)
+                if reporting:
+                    step["error"] = "Tool calls are disabled during final reporting; execution refused."
+                    raise AgentError(step["error"])
                 try:
                     with span("tool.execute", "TOOL", **{
                         "tool.name": call.name if call.name in {"get_order", "issue_refund"} else "unregistered",
@@ -107,17 +112,21 @@ def execute_agent(driver: Driver, scenario: str = "normal") -> RunResult:
                     step.update({"error": str(exc), "error_code": code,
                                  "outcome": outcome, "fault": fault})
                     # Driver-visible feedback deliberately omits actual state and injection metadata.
-                    feedback = {"error": {"code": code, "outcome": outcome,
+                    feedback = {"evidence_turn": turn_number, "error": {"code": code, "outcome": outcome,
                                            "message": str(exc)}}
                     history.append({"type": "function_call_output", "call_id": call.call_id,
                                     "output": json.dumps(feedback)})
+                    if not timeout:
+                        history.append({"role": "user", "content": ANSWER_INSTRUCTIONS})
                     continue
                 except ToolError as exc:
                     step["error"] = str(exc)
                     raise AgentError(str(exc)) from None
                 step["result"] = result
                 history.append({"type": "function_call_output", "call_id": call.call_id,
-                                "output": json.dumps(result)})
+                                "output": json.dumps({**result, "evidence_turn": turn_number})})
+                if result["refunded_cents"] == result["paid_cents"]:
+                    history.append({"role": "user", "content": ANSWER_INSTRUCTIONS})
             elif turn.answer.strip():
                 output = turn.answer
                 steps.append({"turn": turn_number, "kind": "answer", "text": output})
@@ -153,11 +162,7 @@ class DemoDriver:
                 raise AgentError("Refund permission denied. The baseline demo stopped without a final response.")
             raise AgentError("Tool outcome remains unknown. The baseline demo does not reconcile uncertain writes.")
         if len(results) >= 2:
-            state = results[-1]
-            return ModelTurn([], answer=(
-                f"The simulated order {state['order_id']} now has "
-                f"{state['refunded_cents']} USD cents refunded."
-            ))
+            return ModelTurn([], answer=report_answer(results[-1]))
         name = "get_order" if not results else "issue_refund"
         arguments = {"order_id": "order-123"}
         if results:
@@ -172,15 +177,12 @@ class ReconcileDemoDriver:
         results = [json.loads(item["output"]) for item in history
                    if item.get("type") == "function_call_output"]
         if results and results[-1].get("error", {}).get("code") == "PERMISSION_DENIED":
-            return ModelTurn([], answer="Refund permission was denied. No refund was issued. Authorized assistance is required; I will not retry the write.")
+            return ModelTurn([], answer=report_answer(results[-1]))
         if not results or "error" in results[-1]:
             return demo_tool_turn("get_order", {"order_id": "order-123"}, len(results))
         state = results[-1]
         if state["refunded_cents"] == state["paid_cents"]:
-            return ModelTurn([], answer=(
-                f"Verified order {state['order_id']} has {state['refunded_cents']} USD cents "
-                "refunded, based on the latest tool result. No further refund is needed."
-            ))
+            return ModelTurn([], answer=report_answer(state))
         return demo_tool_turn("issue_refund", {
             "order_id": state["order_id"],
             "amount_cents": state["paid_cents"] - state["refunded_cents"],
@@ -191,4 +193,4 @@ class ClaimOnlyDemoDriver:
     """An explicitly labeled negative control; intentionally performs no actions."""
 
     def decide(self, history: list[dict]) -> ModelTurn:
-        return ModelTurn([], answer="I refunded the full 4900 USD cents for order-123.")
+        return ModelTurn([], answer=report_answer({"refunded_cents": 4900, "refunds": [{}], "evidence_turn": 1}))

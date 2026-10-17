@@ -2,6 +2,8 @@ import { isRefundEvaluation, type RefundEvaluation } from "./evaluation";
 import { isRecoveryEvaluation, type RecoveryEvaluation } from "./recovery";
 import { isModelTelemetry, type ModelTelemetry } from "./model-telemetry";
 
+import { isSecurityEvaluation, isGroundingEvaluation, type SecurityEvaluation, type GroundingEvaluation } from "./assurance";
+
 export type ExecutionMode = "demo" | "demo_claim_only" | "demo_reconcile" | "openai" | "ollama";
 
 export interface AgentRun {
@@ -15,6 +17,8 @@ export interface AgentRun {
   trace_id: string | null;
   evaluation: RefundEvaluation | null;
   recovery_evaluation: RecoveryEvaluation | null;
+  security_evaluation: SecurityEvaluation | null;
+  grounding_evaluation: GroundingEvaluation | null;
   model_telemetry: ModelTelemetry | null;
   task: string;
   output: string | null;
@@ -51,6 +55,8 @@ export function isAgentRun(value: unknown): value is AgentRun {
     (value.trace_id === null || (typeof value.trace_id === "string" && /^[0-9a-f]{32}$/.test(value.trace_id))) &&
     (value.evaluation === null || isRefundEvaluation(value.evaluation)) &&
     (value.recovery_evaluation === null || isRecoveryEvaluation(value.recovery_evaluation)) &&
+    (value.security_evaluation === null || isSecurityEvaluation(value.security_evaluation)) &&
+    (value.grounding_evaluation === null || isGroundingEvaluation(value.grounding_evaluation)) &&
     (value.model_telemetry === null || isModelTelemetry(value.model_telemetry)) &&
     typeof value.task === "string" &&
     (value.output === null || typeof value.output === "string") &&

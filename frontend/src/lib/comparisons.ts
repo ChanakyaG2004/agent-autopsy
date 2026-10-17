@@ -14,8 +14,9 @@ export interface RunChoice {
 }
 export interface ComparisonSide { experiment_name: string; agent_version: string; run: AgentRun }
 export interface RunComparison {
-  comparison_version: "recorded-runs-v1";
+  comparison_version: "recorded-runs-v2";
   baseline: ComparisonSide; candidate: ComparisonSide;
+  security_comparable: boolean; grounding_comparable: boolean;
   outcomes_comparable: boolean; recovery_comparable: boolean;
   tokens_comparable: boolean; request_measurements_comparable: boolean;
   checks: { name: string; passed: boolean; reason: string }[];
@@ -37,8 +38,8 @@ function isSide(v: unknown): v is ComparisonSide {
 }
 
 export function isRunComparison(v: unknown): v is RunComparison {
-  return isRecord(v) && v.comparison_version === "recorded-runs-v1" && isSide(v.baseline) && isSide(v.candidate) &&
-    ["outcomes_comparable", "recovery_comparable", "tokens_comparable", "request_measurements_comparable"].every(key => typeof v[key] === "boolean") &&
+  return isRecord(v) && v.comparison_version === "recorded-runs-v2" && isSide(v.baseline) && isSide(v.candidate) &&
+    ["security_comparable", "grounding_comparable", "outcomes_comparable", "recovery_comparable", "tokens_comparable", "request_measurements_comparable"].every(key => typeof v[key] === "boolean") &&
     Array.isArray(v.checks) && v.checks.every(c => isRecord(c) && typeof c.name === "string" && typeof c.passed === "boolean" && typeof c.reason === "string") &&
     Array.isArray(v.configuration_changes) && v.configuration_changes.every(c => isRecord(c) && typeof c.field === "string" &&
       [c.baseline, c.candidate].every(value => value === null || typeof value === "string" || typeof value === "boolean" || nullableNumber(value))) &&

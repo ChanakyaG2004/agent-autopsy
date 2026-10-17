@@ -64,16 +64,17 @@ def test_denial_feedback_contains_no_harness_metadata_and_has_matching_call_id()
             histories.append(deepcopy(history))
             return super().decide(history)
     result = execute_agent(Observed(), "permission_denied")
-    output = histories[2][-1]
+    output = next(item for item in reversed(histories[2]) if item.get("type") == "function_call_output")
     assert output["call_id"] == "demo-call-2"
     feedback = json.loads(output["output"])
-    assert set(feedback) == {"error"}
+    assert set(feedback) == {"error", "evidence_turn"}
     assert feedback["error"]["code"] == "PERMISSION_DENIED"
     assert feedback["error"]["outcome"] == "rejected"
     assert "fault" not in output["output"] and "refunded_cents" not in output["output"]
     assert result.initial_state == result.final_state
     assert [step.get("tool", step["kind"]) for step in result.steps] == ["get_order", "issue_refund", "answer"]
-    assert "denied" in result.output and "No refund" in result.output
+    assert json.loads(result.output)["outcome"] == "denied"
+    assert json.loads(result.output)["refunded_cents"] is None
 
 
 @pytest.mark.parametrize("scenario", ["permission_denied", "timeout_after_commit"])

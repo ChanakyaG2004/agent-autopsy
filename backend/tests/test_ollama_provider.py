@@ -9,6 +9,7 @@ from alembic import command
 from alembic.config import Config
 from sqlalchemy.exc import IntegrityError
 
+from app.assurance import report_answer
 from app.agent import execute_agent
 from app.ollama_provider import (DEFAULT_MODEL, DEFAULT_URL, OllamaDriver, OllamaUnavailable,
                                  local_endpoint, parse_ollama_usage)
@@ -48,7 +49,7 @@ def local_service(monkeypatch):
         denied = results and results[-1].get("error", {}).get("code") == "PERMISSION_DENIED"
         done = results and results[-1].get("refunded_cents") == 4900
         if done or denied:
-            message = {"role": "assistant", "content": "Refund denied." if denied else "Refund verified."}
+            message = {"role": "assistant", "content": report_answer(results[-1])}
         else:
             name = "get_order" if not results or "error" in results[-1] else "issue_refund"
             arguments = {"order_id": "order-123"}
@@ -76,6 +77,22 @@ def test_only_http_loopback_origins_are_accepted(url):
     with pytest.raises(OllamaUnavailable) as caught:
         local_endpoint(url)
     assert "secret" not in str(caught.value)
+
+
+def test_only_final_reporting_disables_tools_and_requests_native_json(local_service):
+    client, calls, options = local_service
+    driver = OllamaDriver(DEFAULT_MODEL, DEFAULT_URL)
+    try:
+        result = execute_agent(driver)
+        assert result.status == "completed"
+        assert calls[0]["tools"] and "format" not in calls[0]
+        assert calls[1]["tools"] and "format" not in calls[1]
+        assert calls[-1]["tools"] == [] and calls[-1]["format"] == "json"
+        assert "Final reporting phase" in calls[-1]["messages"][0]["content"]
+        assert driver.model_telemetry.configuration.report_output_format == "json"
+        assert driver.model_telemetry.configuration.report_instructions_sha256
+    finally:
+        driver.close()
 
 
 @pytest.mark.parametrize("url", [DEFAULT_URL, "http://localhost:11434/", "http://[::1]:11434"])

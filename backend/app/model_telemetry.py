@@ -44,6 +44,8 @@ class ModelRequestMeasurement(BaseModel):
 class ModelRequestConfiguration(BaseModel):
     model_config = ConfigDict(strict=True, extra="forbid", frozen=True)
     instructions_sha256: str
+    report_instructions_sha256: str | None = None
+    report_output_format: Literal["json"] | None = None
     tool_schemas_sha256: str
     max_output_tokens: int
     max_turns: int

@@ -6,6 +6,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 from app.evaluation import RefundEvaluation
 from app.recovery import RecoveryEvaluation
 from app.model_telemetry import ModelTelemetry
+from app.assurance import SecurityEvaluation, GroundingEvaluation
 
 Scenario = Literal["normal", "timeout_after_commit", "permission_denied"]
 
@@ -54,6 +55,8 @@ class RunRead(BaseModel):
     trace_id: str | None
     evaluation: RefundEvaluation | None
     recovery_evaluation: RecoveryEvaluation | None
+    security_evaluation: SecurityEvaluation | None = None
+    grounding_evaluation: GroundingEvaluation | None = None
     model_telemetry: ModelTelemetry | None
     task: str
     output: str | None

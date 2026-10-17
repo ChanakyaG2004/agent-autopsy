@@ -9,6 +9,7 @@ from importlib.metadata import version
 from pathlib import Path
 
 from app.agent import INSTRUCTIONS, MAX_TURNS, TASK
+from app.assurance import ANSWER_INSTRUCTIONS
 from app.tools import TOOL_SCHEMAS
 
 SUITE_VERSION = "refund-resilience-v1"
@@ -69,6 +70,9 @@ def build_manifest(repetitions: int, schema_revision: str) -> dict:
             "tool_schemas": deepcopy(TOOL_SCHEMAS), "tool_schemas_digest": digest(TOOL_SCHEMAS),
             "max_turns": MAX_TURNS,
             "ledger_evaluator": "refund-ledger-v1", "recovery_evaluator": "recovery-policy-v1",
+            "security_evaluator": "tool-policy-v2", "grounding_evaluator": "refund-grounding-v1",
+            "answer_contract": "refund-answer-v1",
+            "report_instructions": ANSWER_INSTRUCTIONS, "report_instructions_digest": digest(ANSWER_INSTRUCTIONS),
             "model": None, "randomness": "None; deterministic scripts and fixed schedule.",
         },
         "source": {"git_revision": revision, "backend_dirty": dirty,

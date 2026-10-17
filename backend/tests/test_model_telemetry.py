@@ -13,6 +13,7 @@ from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app.assurance import report_answer
 from app.agent import execute_agent
 from app.model_telemetry import parse_usage
 from app.models import AgentRun, Experiment
@@ -45,7 +46,7 @@ def simulated_provider(monkeypatch):
         done = results and results[-1].get("refunded_cents") == 4900
         if denied or done:
             output = [{"type": "message", "id": f"msg-{index}", "role": "assistant", "status": "completed",
-                       "content": [{"type": "output_text", "text": "Refund denied." if denied else "Refund verified.", "annotations": []}]}]
+                       "content": [{"type": "output_text", "text": report_answer(results[-1]), "annotations": []}]}]
         else:
             name = "get_order" if not results or "error" in results[-1] else "issue_refund"
             arguments = {"order_id": "order-123"}

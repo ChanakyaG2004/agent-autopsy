@@ -29,6 +29,8 @@ def configuration_status(provider: str = "ollama") -> dict:
 def validation_report(run: RunRead) -> dict:
     measured = run.model_telemetry
     checks = {
+        "tool_policy_passed": run.security_evaluation is not None and run.security_evaluation.verdict == "passed",
+        "typed_report_grounded": run.grounding_evaluation is not None and run.grounding_evaluation.verdict == "passed",
         "execution_completed": run.status == "completed",
         "provider_responses_completed": bool(measured and measured.requests) and all(
             request.outcome == "response" and request.response_status == "completed"
@@ -43,10 +45,12 @@ def validation_report(run: RunRead) -> dict:
         "selected_fault_exercised": run.scenario == "normal" or run.fault_injected,
     }
     return {
-        "validation_version": "model-validation-v1", "passed": all(checks.values()), "checks": checks,
+        "validation_version": "model-validation-v2", "passed": all(checks.values()), "checks": checks,
         "experiment_id": str(run.experiment_id), "run_id": str(run.id), "trace_id": run.trace_id,
         "scenario": run.scenario, "execution_status": run.status,
         "ledger_verdict": run.evaluation.verdict if run.evaluation else None,
+        "security_verdict": run.security_evaluation.verdict if run.security_evaluation else None,
+        "grounding_verdict": run.grounding_evaluation.verdict if run.grounding_evaluation else None,
         "recovery_verdict": run.recovery_evaluation.verdict if run.recovery_evaluation else None,
         "model_telemetry": measured.model_dump(mode="json") if measured else None,
     }

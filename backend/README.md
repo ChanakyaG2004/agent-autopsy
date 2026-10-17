@@ -4,7 +4,7 @@ The FastAPI application validates configurations, saves experiments, and execute
 
 The [timeout-after-commit walkthrough](../docs/timeout-after-commit.md) explains one-shot response loss, unknown outcomes, and the separate recovery demo. The [permission and policy walkthrough](../docs/permission-and-policy.md) adds definitive denial and independent trajectory grading. Multi-scenario execution remains unsupported.
 
-Each new execution receives versioned deterministic ledger and recovery-policy evaluations, independent of execution status. Final-answer wording is not graded. See [refund evaluation](../docs/refund-evaluation.md) for checks, evidence validation, and the deliberately incorrect claim-only demo.
+Each new execution receives versioned deterministic ledger and recovery-policy evaluations, independent of execution status. The original ledger and recovery checks do not grade wording. New runs also receive tool-policy and typed-report grounding checks against agent-visible responses; unsupported free-form report formats remain not evaluable. See [refund evaluation](../docs/refund-evaluation.md) for checks, evidence validation, and the deliberately incorrect claim-only demo.
 
 Tracing is opt-in. See [Phoenix tracing setup and design](../docs/phoenix-tracing.md) to start the local collector, enable export, and inspect normal/error traces. Application PostgreSQL remains independent of Phoenix's local trace store.
 
@@ -123,4 +123,8 @@ uv run --env-file .env python -m app.validate_model --execute --scenario normal
 
 ## Recorded comparisons
 
-`GET /runs?limit=100&offset=0` lists saved run choices joined to experiment labels. `GET /run-comparisons?baseline_id=<uuid>&candidate_id=<uuid>` returns `recorded-runs-v1`: stored results, explicit eligibility checks, configuration differences, and permitted candidate-minus-baseline deltas. Identical IDs return 422; missing runs return 404. These routes never execute or regrade runs. No schema migration is required. `app/comparisons.py` owns the rules, and `tests/test_comparisons.py` verifies eligibility, missing evidence, measurement boundaries, pagination, and read-only behavior. See the [comparison walkthrough](../docs/run-comparisons.md).
+`GET /runs?limit=100&offset=0` lists saved run choices joined to experiment labels. `GET /run-comparisons?baseline_id=<uuid>&candidate_id=<uuid>` returns `recorded-runs-v2`: stored results, explicit eligibility checks, configuration differences, and permitted candidate-minus-baseline deltas. Identical IDs return 422; missing runs return 404. These routes never execute or regrade runs. The assurance milestone requires migration `7ba56d892c41`; existing rows remain ungraded. `app/comparisons.py` owns the rules, and `tests/test_comparisons.py` verifies eligibility, missing evidence, measurement boundaries, pagination, and read-only behavior. See the [comparison walkthrough](../docs/run-comparisons.md).
+
+## Security and typed-report grounding
+
+See the [design and learning walkthrough](../docs/security-and-grounding.md). `app/assurance.py` owns the strict final-report contract and pure tool-policy/grounding evaluators. New grades are saved independently in nullable JSONB columns, with separate Phoenix evaluator spans. The model validation CLI now emits `model-validation-v2` and checks both grades. The tool boundary remains strict; a blocked unsafe attempt can still fail policy. Grounding reads no hidden final state, and unsupported prose stays unavailable.

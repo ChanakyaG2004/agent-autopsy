@@ -8,6 +8,7 @@ from openai import (APIConnectionError, APIError, APITimeoutError, Authenticatio
 from openinference.semconv.trace import SpanAttributes
 
 from app.agent import AgentError, ClaimOnlyDemoDriver, DemoDriver, INSTRUCTIONS, MAX_TURNS, ModelTurn, ReconcileDemoDriver, ToolCall
+from app.assurance import ANSWER_INSTRUCTIONS, reporting_turn
 from app.tools import TOOL_SCHEMAS
 from app.telemetry import span
 from app.model_telemetry import (ModelRequestConfiguration, ModelRequestMeasurement,
@@ -24,7 +25,7 @@ class OpenAIDriver:
         self.instructions = INSTRUCTIONS
         self.tools = deepcopy(TOOL_SCHEMAS)
         self.configuration = ModelRequestConfiguration(
-            instructions_sha256=fingerprint(self.instructions), tool_schemas_sha256=fingerprint(self.tools),
+            instructions_sha256=fingerprint(self.instructions), report_instructions_sha256=fingerprint(ANSWER_INSTRUCTIONS), tool_schemas_sha256=fingerprint(self.tools),
             max_output_tokens=1024, max_turns=MAX_TURNS, timeout_seconds=10.0,
             max_retries=0, store=False, parallel_tool_calls=False,
         )
@@ -45,10 +46,12 @@ class OpenAIDriver:
 
     def _request(self, history: list[dict], current) -> ModelTurn:
         started = perf_counter_ns()
+        reporting = reporting_turn(history)
         try:
             response = self.client.responses.create(
-                model=self.model, instructions=self.instructions, input=history,
-                tools=self.tools, parallel_tool_calls=self.configuration.parallel_tool_calls,
+                model=self.model, instructions=self.instructions + "\nFinal reporting phase: " + ANSWER_INSTRUCTIONS if reporting else self.instructions,
+                input=history[:-1] if reporting else history,
+                tools=[] if reporting else self.tools, parallel_tool_calls=self.configuration.parallel_tool_calls,
                 store=self.configuration.store,
                 include=["reasoning.encrypted_content"], max_output_tokens=self.configuration.max_output_tokens,
             )

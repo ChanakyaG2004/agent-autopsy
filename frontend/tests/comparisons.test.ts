@@ -13,7 +13,7 @@ const telemetry: ModelTelemetry = { provider: "ollama", telemetry_version: "olla
   known_usage: { input_tokens: 0, output_tokens: 0, total_tokens: 0, cached_input_tokens: null, cache_write_input_tokens: null, reasoning_output_tokens: null },
   requests: [{}] };
 const run = (n: number): AgentRun => ({ ...choice(n), mode: "ollama", scenario: "normal", status: "completed",
-  fault_injected: false, trace_id: null, evaluation: null, recovery_evaluation: null, model_telemetry: telemetry,
+  fault_injected: false, trace_id: null, security_evaluation: null, grounding_evaluation: null, evaluation: null, recovery_evaluation: null, model_telemetry: telemetry,
   task: "Refund", output: null, error: null, steps: [], initial_state: {}, final_state: {}, finished_at: "2026-10-19T12:00:00Z" });
 
 test("default pair prefers a comparable model scenario over newer scripts, faults, and running attempts", () => {
@@ -39,9 +39,9 @@ test("zero usage is real evidence; unknown usage stays null and incomplete", () 
 });
 
 test("comparison contract preserves unavailable deltas and rejects malformed evidence", () => {
-  const report: RunComparison = { comparison_version: "recorded-runs-v1", baseline: { experiment_name: "Earlier", agent_version: "refund-v1", run: run(1) },
+  const report: RunComparison = { comparison_version: "recorded-runs-v2", baseline: { experiment_name: "Earlier", agent_version: "refund-v1", run: run(1) },
     candidate: { experiment_name: "Later", agent_version: "refund-v1", run: run(2) }, outcomes_comparable: false, recovery_comparable: false,
-    tokens_comparable: false, request_measurements_comparable: true, checks: [], configuration_changes: [],
+    security_comparable: false, grounding_comparable: false, tokens_comparable: false, request_measurements_comparable: true, checks: [], configuration_changes: [],
     measurements: [{ field: "total_tokens", unit: "tokens", baseline: 0, candidate: null, delta: null }], notes: ["One observation per side."] };
   assert.ok(isRunComparison(report));
   assert.ok(!isRunComparison({ ...report, comparison_version: "future" }));

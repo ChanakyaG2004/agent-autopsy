@@ -88,7 +88,7 @@ def test_driver_feedback_does_not_leak_actual_committed_state():
     assert timeout_output["type"] == "function_call_output"
     assert timeout_output["call_id"] == "demo-call-2"
     feedback = json.loads(timeout_output["output"])
-    assert set(feedback) == {"error"}
+    assert set(feedback) == {"error", "evidence_turn"}
     assert feedback["error"]["outcome"] == "unknown"
     assert "refunded_cents" not in timeout_output["output"]
     assert "refunds" not in timeout_output["output"]

@@ -84,6 +84,18 @@ def test_changed_task_contract_suppresses_deltas():
     assert not compare_sides(side(), candidate).outcomes_comparable
 
 
+def test_different_security_evaluator_versions_are_not_compared_as_equal_evidence():
+    from app.assurance import SecurityEvaluation
+    from app.evaluation import EvaluationCheck
+    check = EvaluationCheck(name="registered_tools", passed=True, reason="Allowed tools")
+    first = side(security_evaluation=SecurityEvaluation(evaluator_version="tool-policy-v1", verdict="passed", attempted_tools=1, checks=[check]))
+    second = side(security_evaluation=SecurityEvaluation(verdict="passed", attempted_tools=1, checks=[check]))
+    report = compare_sides(first, second)
+    assert report.outcomes_comparable and not report.security_comparable
+    assert report.baseline.run.security_evaluation.evaluator_version == "tool-policy-v1"
+    assert report.candidate.run.security_evaluation.evaluator_version == "tool-policy-v2"
+
+
 @pytest.mark.parametrize("evaluation", [None, unavailable_evaluation()])
 def test_missing_grade_is_not_a_task_failure_or_comparable(evaluation):
     report = compare_sides(side(), side(evaluation=evaluation))

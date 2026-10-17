@@ -48,10 +48,12 @@ class MeasurementDelta(BaseModel):
 
 
 class RunComparison(BaseModel):
-    comparison_version: Literal["recorded-runs-v1"] = "recorded-runs-v1"
+    comparison_version: Literal["recorded-runs-v2"] = "recorded-runs-v2"
     baseline: ComparisonSide
     candidate: ComparisonSide
     outcomes_comparable: bool
+    security_comparable: bool
+    grounding_comparable: bool
     recovery_comparable: bool
     tokens_comparable: bool
     request_measurements_comparable: bool
@@ -107,6 +109,13 @@ def compare_sides(baseline: ComparisonSide, candidate: ComparisonSide) -> RunCom
         and left.recovery_evaluation.evaluator_version == right.recovery_evaluation.evaluator_version
         and left.scenario != "normal" and left.fault_injected and right.fault_injected),
         "Recovery comparison requires matching graded policies and actual fault exercise on both sides. Normal runs are not recovery tests.")
+    assurance_flags = {}
+    for name in ("security", "grounding"):
+        x, y = getattr(left, f"{name}_evaluation"), getattr(right, f"{name}_evaluation")
+        assurance_flags[name] = same_case and check(f"{name}_evidence", bool(
+            x and y and x.verdict in {"passed", "failed"} and y.verdict in {"passed", "failed"}
+            and x.evaluator_version == y.evaluator_version),
+            f"Both {name} grades must be available with the same evaluator version.")
     a, b = left.model_telemetry, right.model_telemetry
     measured = check("request_measurements", bool(a and b and a.attempted_requests and b.attempted_requests),
                      "Both sides need recorded model requests; scripted or historical runs have no model timing/usage.")
@@ -152,9 +161,11 @@ def compare_sides(baseline: ComparisonSide, candidate: ComparisonSide) -> RunCom
     return RunComparison(
         baseline=baseline, candidate=candidate, outcomes_comparable=same_case and ledger_known,
         recovery_comparable=same_case and recovery_known, tokens_comparable=token_eligible,
+        security_comparable=assurance_flags["security"], grounding_comparable=assurance_flags["grounding"],
         request_measurements_comparable=request_eligible, checks=checks, configuration_changes=changes,
         measurements=measurements, notes=[
             "This is one recorded observation per side, not a reliability rate or proof of general improvement.",
+            "Tool-policy grades audit attempted sandbox actions, not general security. Grounding grades check only the typed refund report against agent-visible tool responses, not arbitrary prose.",
             "Request time is client-observed across all attempts. Loading, caching, hardware, request count, and failures can differ; no speedup claim is inferred.",
             "Token values are known subtotals when usage is incomplete. Suppressed deltas are unavailable, not zero. No dollar cost or semantic answer score is calculated.",
         ],

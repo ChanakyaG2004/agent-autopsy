@@ -12,6 +12,7 @@ from app.agent import TASK, execute_agent
 from app.evaluation import evaluate_refund, unavailable_evaluation
 from app.recovery import evaluate_recovery, unavailable_recovery
 from app.models import AgentRun, Experiment
+from app.assurance import evaluate_security, evaluate_grounding, unavailable_security, unavailable_grounding
 from app.model_telemetry import ModelTelemetry
 from app.providers import ProviderNotConfigured, make_driver
 from app.tools import RefundSandbox
@@ -102,6 +103,24 @@ def start_run(experiment_id: UUID, mode: str, session: Session, *, run_id: UUID 
                 recovery = unavailable_recovery()
             run_span.set_attribute("agent.recovery.verdict", recovery.verdict)
             run_span.set_attribute("agent.recovery.version", recovery.evaluator_version)
+            assurance = {}
+            for name, evaluate, fallback, arguments in [
+                ("security", evaluate_security, unavailable_security,
+                 dict(scenario=scenario, steps=result.steps, initial_state=result.initial_state, final_state=result.final_state)),
+                ("grounding", evaluate_grounding, unavailable_grounding, dict(output=result.output, steps=result.steps)),
+            ]:
+                try:
+                    with span(f"evaluation.{name}", "EVALUATOR") as assurance_span:
+                        grade = evaluate(**arguments)
+                        assurance_span.set_attribute("evaluation.version", grade.evaluator_version)
+                        set_json(assurance_span, "output", {"verdict": grade.verdict,
+                                 "checks": {check.name: check.passed for check in grade.checks}})
+                except Exception as exc:
+                    logger.error("%s evaluation failed: %s", name, type(exc).__name__)
+                    grade = fallback()
+                assurance[name] = grade
+                run_span.set_attribute(f"agent.{name}.verdict", grade.verdict)
+                run_span.set_attribute(f"agent.{name}.version", grade.evaluator_version)
             run_span.set_attribute("agent.execution_status", result.status)
             set_json(run_span, "output", {
                 "execution_status": result.status,
@@ -115,6 +134,8 @@ def start_run(experiment_id: UUID, mode: str, session: Session, *, run_id: UUID 
                 run.fault_injected = result.fault_injected
                 run.evaluation = evaluation.model_dump(mode="json")
                 run.recovery_evaluation = recovery.model_dump(mode="json")
+                run.security_evaluation = assurance["security"].model_dump(mode="json")
+                run.grounding_evaluation = assurance["grounding"].model_dump(mode="json")
                 run.model_telemetry = model_telemetry.model_dump(mode="json") if model_telemetry else None
                 run.status = result.status
                 run.output = result.output

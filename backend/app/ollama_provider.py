@@ -10,6 +10,7 @@ import requests
 from pydantic import ValidationError
 
 from app.agent import AgentError, INSTRUCTIONS, MAX_TURNS, ModelTurn, ToolCall
+from app.assurance import ANSWER_INSTRUCTIONS, reporting_turn
 from app.model_telemetry import (ModelRequestConfiguration, ModelRequestMeasurement,
                                  TokenUsage, fingerprint, summarize_requests)
 from app.telemetry import span
@@ -97,7 +98,7 @@ class OllamaDriver:
             if not isinstance(digest, str) or not isinstance(server_version, str):
                 raise OllamaUnavailable("Ollama model identity metadata is unavailable.")
             self.configuration = ModelRequestConfiguration(
-                instructions_sha256=fingerprint(self.instructions), tool_schemas_sha256=fingerprint(self.tools),
+                instructions_sha256=fingerprint(self.instructions), report_instructions_sha256=fingerprint(ANSWER_INSTRUCTIONS), report_output_format="json", tool_schemas_sha256=fingerprint(self.tools),
                 max_output_tokens=1024, max_turns=MAX_TURNS, timeout_seconds=60.0, max_retries=0,
                 store=None, parallel_tool_calls=None, model_digest=digest, server_version=server_version,
                 context_window_tokens=8192, temperature=0.0,
@@ -124,7 +125,11 @@ class OllamaDriver:
         return summarize_requests(self.model, self.requests, self.configuration, provider="ollama")
 
     def _messages(self, history: list[dict]) -> list[dict]:
-        messages = [{"role": "system", "content": self.instructions}]
+        reporting = reporting_turn(history)
+        instructions = self.instructions + "\nFinal reporting phase: " + ANSWER_INSTRUCTIONS if reporting else self.instructions
+        messages = [{"role": "system", "content": instructions}]
+        if reporting:
+            history = history[:-1]
         names = {}
         for item in history:
             if item.get("role") == "user":
@@ -147,7 +152,8 @@ class OllamaDriver:
             started = perf_counter_ns()
             try:
                 response = self.client.post(self.base_url + "/api/chat", json={
-                    "model": self.model, "messages": messages, "tools": self.tools, "stream": False,
+                    "model": self.model, "messages": messages, "tools": [] if reporting_turn(history) else self.tools, "stream": False,
+                    **({"format": "json"} if reporting_turn(history) else {}),
                     "options": {"num_predict": self.configuration.max_output_tokens,
                                 "num_ctx": self.configuration.context_window_tokens,
                                 "temperature": self.configuration.temperature},

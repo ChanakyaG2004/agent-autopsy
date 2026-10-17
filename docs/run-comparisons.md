@@ -29,7 +29,7 @@ sequenceDiagram
 
 The page is a Next.js Server Component. Its panels use Client Components for selection, fetch state, and refresh. Typed runtime guards reject malformed responses. Read requests have a ten-second wait limit and refreshable errors. Changing a selection cancels the old browser request and hides the old report.
 
-`backend/app/comparisons.py` owns the rules. The response is versioned as `recorded-runs-v1`. Evidence stays in existing run records; the UI presents stored grades and the API's flags and deltas. The initial selection prefers a terminal model pair with matching driver, scenario, and task-contract label, then a matching scripted pair, then any two terminal runs. This is a convenience; the server checks actual comparability. The browser lists the latest 100 runs. The API supports `limit` 1–100 and nonnegative `offset`.
+`backend/app/comparisons.py` owns the rules. The response is versioned as `recorded-runs-v2`. Evidence stays in existing run records; the UI presents stored grades and the API's flags and deltas. The initial selection prefers a terminal model pair with matching driver, scenario, and task-contract label, then a matching scripted pair, then any two terminal runs. This is a convenience; the server checks actual comparability. The browser lists the latest 100 runs. The API supports `limit` 1–100 and nonnegative `offset`.
 
 ## Comparison eligibility
 
@@ -46,7 +46,7 @@ Raw observations stay visible when a delta is suppressed. Partial token usage st
 
 Configuration changes include driver, provider, model label, task-contract label, scenario, telemetry version, and stored request settings such as prompt/tool hashes and model digest. `agent_version` currently identifies the supported task contract (`refund-v1`), not a unique code release. A changed prompt fingerprint identifies a change but cannot recover the prior prompt text. Per-run full source snapshots and repeated live-model suites remain future work; benchmark collections retain their source manifest.
 
-Both sides have expandable evidence: full run ID, actual observation time, agent claim, ledger/policy checks, executed steps, before/after state, model measurements, and a Phoenix trace link when recorded. No semantic answer judge or dollar-cost estimate is introduced.
+Both sides have expandable evidence: full run ID, actual observation time, agent claim, ledger/policy checks, executed steps, before/after state, model measurements, and a Phoenix trace link when recorded. No general semantic answer judge or dollar-cost estimate is introduced. The later [security/grounding milestone](security-and-grounding.md) adds independent tool-policy and typed-report evidence checks; historical rows remain ungraded.
 
 ## Concrete local-model example
 
@@ -82,4 +82,4 @@ Refresh afterward. The local validation collection recorded 9 runs: 7 executions
 
 All 273 backend tests pass, including signed/zero deltas, mismatched tasks/scenarios/states/contracts, incomplete usage, missing/changed model identity, unavailable grades, fault coverage, pagination, and read-only behavior. Five frontend contract tests cover selection, malformed responses, unavailable measurements, and count partitions that cannot drop failed work. Lint, strict types, and production build pass. Targeted browser checks cover the saved local-model pair, mismatched-case suppression, and scripted table/cell traces; the full application walkthrough remains deferred.
 
-This feature does not add repeated live-model benchmarks, confidence intervals, answer grading, background execution, authentication, or deployment packaging. Next is security and answer grounding, then durable background workers and release packaging.
+This feature does not add repeated live-model benchmarks, confidence intervals, answer grading, background execution, authentication, or deployment packaging. Security and typed-report grounding are now documented in the [next checkpoint](security-and-grounding.md). Next are durable background workers and release packaging.

@@ -4,6 +4,7 @@ import { useId, useState } from "react";
 import { apiBaseUrl, type SavedExperiment } from "@/lib/experiments";
 import { isAgentRun, phoenixTraceUrl, type AgentRun, type ExecutionMode } from "@/lib/runs";
 import { RunEvaluation } from "@/components/run-evaluation";
+import { AssuranceEvaluation } from "./assurance-evaluation";
 import { RecoveryPolicy } from "@/components/recovery-evaluation";
 
 export function ExperimentRunner({ experiment }: { experiment: SavedExperiment }) {
@@ -127,6 +128,7 @@ export function ExperimentRunner({ experiment }: { experiment: SavedExperiment }
           {saved.error && <p className="message error">{saved.error}</p>}
           <RunEvaluation evaluation={saved.evaluation} running={saved.status === "running"} />
           <RecoveryPolicy evaluation={saved.recovery_evaluation} running={saved.status === "running"} />
+          <AssuranceEvaluation security={saved.security_evaluation} grounding={saved.grounding_evaluation} running={saved.status === "running"} />
           <details open>
             <summary>Executed steps ({saved.steps.length})</summary>
             <pre>{JSON.stringify(saved.steps, null, 2)}</pre>

@@ -85,11 +85,12 @@ export function BenchmarkPanel() {
         </div>
         <details className="benchmark-items"><summary>Inspect {report.items.length} saved cell records</summary>
           <div className="table-scroll" role="region" aria-label="Benchmark cells" tabIndex={0}><table><thead><tr>
-            <th scope="col">Policy / case</th><th scope="col">Collection / execution</th><th scope="col">Ledger</th><th scope="col">Recovery</th><th scope="col">Fault exercised</th><th scope="col">Evidence</th>
+            <th scope="col">Policy / case</th><th scope="col">Collection / execution</th><th scope="col">Ledger</th><th scope="col">Recovery</th><th scope="col">Tool policy / typed report</th><th scope="col">Fault exercised</th><th scope="col">Evidence</th>
           </tr></thead><tbody>{report.items.map(item => <tr key={item.id}>
             <th scope="row">{drivers[item.mode]}<small>{item.case_key.replaceAll("_", " ")} · repetition {item.repetition}</small></th>
             <td>{item.status} / {item.run?.status ?? "No run"}{item.error && <small>{item.error}</small>}</td>
             <td><Verdict value={item.run?.evaluation?.verdict} /></td><td><Verdict value={item.run?.recovery_evaluation?.verdict} /></td>
+            <td><Verdict value={item.run?.security_evaluation?.verdict} /> / <Verdict value={item.run?.grounding_evaluation?.verdict} /></td>
             <td>{!item.run ? "Unavailable" : item.run.scenario === "normal" ? "Not selected" : item.run.fault_injected ? "Yes" : "No"}</td>
             <td>{item.run?.trace_id && <a href={phoenixTraceUrl(item.run.trace_id)} target="_blank" rel="noopener noreferrer">Phoenix trace</a>}
               <details><summary>Saved evidence</summary><pre>{JSON.stringify({ run_id: item.run_id, run: item.run }, null, 2)}</pre></details></td>
