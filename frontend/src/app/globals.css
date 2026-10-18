@@ -130,3 +130,7 @@ select:focus-visible, summary:focus-visible { outline: 3px solid #2563eb; outlin
 .evaluation-checks div { margin: 0.6rem 0; }
 .evaluation-checks dd { margin-left: 1rem; }
 .fault-message { color: #92400e; background: #fffbeb; }
+
+.job-status { margin: 1rem 0; padding: 1rem; border: 1px solid #64748b; border-left: 4px solid #2563eb; border-radius: 0.25rem; background: white; }
+.job-status code { overflow-wrap: anywhere; }
+.benchmark-queue { margin: 1.5rem 0; max-width: 40rem; }

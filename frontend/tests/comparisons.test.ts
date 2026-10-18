@@ -28,6 +28,10 @@ test("fallback pair retains different cases for explicit mismatch reporting", ()
   assert.deepEqual(preferredPair([choice(2, { scenario: "permission_denied" }), choice(1)]), [id(1), id(2)]);
 });
 
+test("interrupted observations never become the default terminal comparison pair", () => {
+  assert.deepEqual(preferredPair([choice(3, { status: "interrupted" }), choice(2), choice(1)]), [id(1), id(2)]);
+});
+
 test("zero usage is real evidence; unknown usage stays null and incomplete", () => {
   assert.ok(isModelTelemetry(telemetry));
   assert.ok(isAgentRun(run(1)));

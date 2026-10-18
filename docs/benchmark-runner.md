@@ -1,5 +1,7 @@
 # Reproducible benchmark runner
 
+Current HTTP execution uses [durable jobs and workers](durable-workers.md). This earlier checkpoint documents the shared inline engine; synchronous HTTP routes now require an explicit debugging opt-in.
+
 This is the first of the six release milestones. It turns individual refund runs
 into a saved, repeatable comparison. It deliberately starts with scripted drivers;
 live model validation is the next milestone.

@@ -112,4 +112,4 @@ Seven earlier validation failures remain saved. Combined action/report prompts p
 
 A new nine-cell scripted benchmark (`1100cac5-8706-4875-9319-089134a51bdb`) retains v2 policy grades and per-cell grounding. The claim-only cells fail grounding through invented citations. The regression suite passes 316 backend tests and 8 frontend contract tests; lint, strict type checking, production build, and migration consistency checks pass. Targeted UI verification checks the independent grades, check explanations, version mismatch, benchmark evidence, and Phoenix evaluator spans.
 
-Next: durable background workers so model calls and benchmarks no longer depend on a long-lived HTTP request, followed by release packaging.
+Durable background execution is now implemented in the [worker checkpoint](durable-workers.md). Next is release packaging.

@@ -24,6 +24,8 @@ The comparison page at `/compare` shows saved executions side by side: independe
 
 New runs also persist a tool-policy audit and typed-report grounding against agent-visible evidence. The two checks remain independent of business success. Historical answers stay ungraded; arbitrary prose is not semantically scored. See the [security and grounding walkthrough](docs/security-and-grounding.md).
 
+Agent and benchmark submissions now use a durable PostgreSQL queue and separate workers. Request IDs prevent duplicate submissions; renewable leases fence stale publishers. Recovery retains saved outcomes, continues untouched benchmark cells, and explicitly marks unknown executions interrupted without replaying them. See the [worker design and walkthrough](docs/durable-workers.md).
+
 Development proceeds in small, explained steps, with a focus on understanding each design decision before expanding the system.
 
 ## Repository layout
@@ -38,4 +40,4 @@ See [frontend setup](frontend/README.md) and [backend/PostgreSQL setup](backend/
 
 ## Next milestone
 
-Use the [benchmark runner walkthrough](docs/benchmark-runner.md) for the fixed suite, API/CLI, reproducibility snapshots, failure semantics, and explicit metric denominators. The [permission and policy walkthrough](docs/permission-and-policy.md) explains the independent outcomes. The [local Ollama walkthrough](docs/ollama-local.md) documents native tool calling, local execution boundaries, measurements, and actual validation results. The earlier [OpenAI telemetry walkthrough](docs/model-telemetry.md) remains available. Next: durable background workers, then release packaging. The application walkthrough is deferred while we work through release milestones one at a time. The [project rundown](docs/project-rundown.md), [execution walkthrough](docs/agent-execution.md), [tracing walkthrough](docs/phoenix-tracing.md), and [evaluation walkthrough](docs/refund-evaluation.md) document earlier checkpoints.
+Use the [benchmark runner walkthrough](docs/benchmark-runner.md) for the fixed suite, API/CLI, reproducibility snapshots, failure semantics, and explicit metric denominators. The [permission and policy walkthrough](docs/permission-and-policy.md) explains the independent outcomes. The [local Ollama walkthrough](docs/ollama-local.md) documents native tool calling, local execution boundaries, measurements, and actual validation results. The earlier [OpenAI telemetry walkthrough](docs/model-telemetry.md) remains available. Next: release packaging with Docker Compose, CI, startup checks, and consolidated documentation. The application walkthrough is deferred while we work through release milestones one at a time. The [project rundown](docs/project-rundown.md), [execution walkthrough](docs/agent-execution.md), [tracing walkthrough](docs/phoenix-tracing.md), and [evaluation walkthrough](docs/refund-evaluation.md) document earlier checkpoints.

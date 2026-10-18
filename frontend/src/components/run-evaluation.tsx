@@ -11,9 +11,9 @@ const checkLabels: Record<string, string> = {
   ledger_consistent: "Ledger agrees with refunded total (cents)",
 };
 
-export function RunEvaluation({ evaluation, running }: { evaluation: RefundEvaluation | null; running: boolean }) {
+export function RunEvaluation({ evaluation, running, interrupted = false }: { evaluation: RefundEvaluation | null; running: boolean; interrupted?: boolean }) {
   if (!evaluation) {
-    return <p><strong>Refund ledger:</strong> {running
+    return <p><strong>Refund ledger:</strong> {interrupted ? "Unavailable after interruption; final state is unknown." : running
       ? "Pending execution outcome."
       : "Not evaluated. This historical run has no saved evaluation; run again to evaluate a fresh sandbox."}</p>;
   }

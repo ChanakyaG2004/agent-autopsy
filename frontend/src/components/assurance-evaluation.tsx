@@ -1,13 +1,13 @@
 import type { GroundingEvaluation, SecurityEvaluation } from "@/lib/assurance";
 
-export function AssuranceEvaluation({ security, grounding, running }: {
-  security: SecurityEvaluation | null; grounding: GroundingEvaluation | null; running: boolean;
+export function AssuranceEvaluation({ security, grounding, running, interrupted = false }: {
+  security: SecurityEvaluation | null; grounding: GroundingEvaluation | null; running: boolean; interrupted?: boolean;
 }) {
   return <>
     {([{ title: "Tool-policy audit", grade: security, description: "Audits requested tools, argument scope, reads, retries, and bounded state. Unsafe attempts can fail even when tools blocked them. This is not a general security guarantee." },
       { title: "Typed-report grounding", grade: grounding, description: "Checks the structured refund report against the latest agent-visible tool response. Free-form answers and general language quality are not graded." }]).map(({ title, grade, description }) =>
       <section key={title} className={`evaluation-result evaluation-${grade?.verdict ?? "unknown"}`} aria-label={title}>
-        <h4>{title}: {grade?.verdict.replaceAll("_", " ") ?? (running ? "Pending" : "Not evaluated for this historical run")}</h4>
+        <h4>{title}: {grade?.verdict.replaceAll("_", " ") ?? (interrupted ? "Unavailable after interruption" : running ? "Pending" : "Not evaluated for this historical run")}</h4>
         <p>{description}</p>
         {grade && <><p><code>{grade.evaluator_version}</code></p><dl className="evaluation-checks">{grade.checks.map(check => <div key={check.name}>
           <dt><strong>{grade.verdict === "not_evaluable" ? "Unavailable" : check.passed ? "Pass" : "Fail"} · {check.name.replaceAll("_", " ")}</strong></dt>

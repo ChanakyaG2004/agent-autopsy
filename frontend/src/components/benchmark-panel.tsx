@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { apiBaseUrl } from "@/lib/experiments";
 import { isBenchmarkDetail, isBenchmarkRecord, type BenchmarkDetail, type BenchmarkRecord } from "@/lib/comparisons";
 import { phoenixTraceUrl } from "@/lib/runs";
+import { BenchmarkQueue } from "./benchmark-queue";
 import { Verdict } from "./comparison-report";
 
 type DetailState = { status: "loading" } | { status: "error" } | { status: "success"; report: BenchmarkDetail };
@@ -13,6 +14,7 @@ export function BenchmarkPanel() {
   const [benchmarks, setBenchmarks] = useState<BenchmarkRecord[]>([]);
   const [listStatus, setListStatus] = useState("loading");
   const [revision, setRevision] = useState(0);
+  const refreshCollections = useCallback(() => setRevision(value => value + 1), []);
   const [selected, setSelected] = useState("");
   const [detail, setDetail] = useState<DetailState>({ status: "loading" });
 
@@ -59,6 +61,7 @@ export function BenchmarkPanel() {
   return <section className="comparison-section" aria-labelledby="benchmark-comparison-heading">
     <h2 id="benchmark-comparison-heading">Scripted policy benchmark</h2>
     <p>One distinct refund task across three scenarios and three scripted policies. These controls exercise the harness; they do not measure a live model’s reliability. Repetitions repeat the same cases.</p>
+    <BenchmarkQueue onFinished={refreshCollections} />
     <button className="secondary-button" onClick={() => { setSelected(""); setRevision(value => value + 1); }}>Refresh saved benchmarks</button>
     {listStatus === "loading" && <p role="status">Loading saved benchmarks…</p>}
     {listStatus === "error" && <p role="alert" className="message error">Could not load benchmarks. Check the API and refresh.</p>}
@@ -91,7 +94,7 @@ export function BenchmarkPanel() {
             <td>{item.status} / {item.run?.status ?? "No run"}{item.error && <small>{item.error}</small>}</td>
             <td><Verdict value={item.run?.evaluation?.verdict} /></td><td><Verdict value={item.run?.recovery_evaluation?.verdict} /></td>
             <td><Verdict value={item.run?.security_evaluation?.verdict} /> / <Verdict value={item.run?.grounding_evaluation?.verdict} /></td>
-            <td>{!item.run ? "Unavailable" : item.run.scenario === "normal" ? "Not selected" : item.run.fault_injected ? "Yes" : "No"}</td>
+            <td>{!item.run ? "Unavailable" : item.run.status === "interrupted" ? "Unknown" : item.run.scenario === "normal" ? "Not selected" : item.run.fault_injected ? "Yes" : "No"}</td>
             <td>{item.run?.trace_id && <a href={phoenixTraceUrl(item.run.trace_id)} target="_blank" rel="noopener noreferrer">Phoenix trace</a>}
               <details><summary>Saved evidence</summary><pre>{JSON.stringify({ run_id: item.run_id, run: item.run }, null, 2)}</pre></details></td>
           </tr>)}</tbody></table></div>

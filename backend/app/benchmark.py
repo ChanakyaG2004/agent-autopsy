@@ -13,6 +13,7 @@ from app.benchmark_schemas import (BenchmarkCounts, BenchmarkDetail, BenchmarkIt
 from app.benchmark_suite import MODES, build_manifest
 from app.execution import start_run
 from app.models import AgentRun, Benchmark, BenchmarkItem, Experiment
+from app.jobs import Lease, LeaseLost, interrupt_run, reservation
 from app.schemas import RunRead
 
 logger = logging.getLogger(__name__)
@@ -70,48 +71,71 @@ def update_summary(benchmark: Benchmark, session: Session) -> None:
     benchmark.summary = summarize(benchmark.manifest, item_rows(benchmark.id, session)).model_dump(mode="json")
 
 
-def run_benchmark(request: BenchmarkRequest, session: Session) -> UUID:
-    # Snapshot and commit the complete schedule before running any agent.
-    with session.begin():
-        revision = session.scalar(text("SELECT version_num FROM alembic_version"))
-        manifest = build_manifest(request.repetitions, revision)
-        benchmark = Benchmark(suite_version=request.suite_version, status="running", manifest=manifest,
-                              summary=BenchmarkSummary(overall=BenchmarkCounts(), drivers=[]).model_dump(mode="json"))
-        session.add(benchmark)
+def prepare_benchmark(request: BenchmarkRequest, session: Session) -> UUID:
+    """Caller commits this complete schedule atomically with its job receipt."""
+    revision = session.scalar(text("SELECT version_num FROM alembic_version"))
+    manifest = build_manifest(request.repetitions, revision)
+    benchmark = Benchmark(suite_version=request.suite_version, status="running", manifest=manifest,
+                          summary=BenchmarkSummary(overall=BenchmarkCounts(), drivers=[]).model_dump(mode="json"))
+    session.add(benchmark)
+    session.flush()
+    for cell in manifest["schedule"]:
+        experiment = Experiment(name=f'Benchmark {cell["case_key"]}', agent_version="refund-v1", scenarios=[cell["scenario"]])
+        session.add(experiment)
         session.flush()
-        items = []
-        for cell in manifest["schedule"]:
-            # Separate experiments keep each scheduled execution isolated and inspectable.
-            experiment = Experiment(name=f'Benchmark {cell["case_key"]}', agent_version="refund-v1",
-                                    scenarios=[cell["scenario"]])
-            session.add(experiment)
-            session.flush()
-            item = BenchmarkItem(benchmark_id=benchmark.id, experiment_id=experiment.id,
+        session.add(BenchmarkItem(benchmark_id=benchmark.id, experiment_id=experiment.id,
                                  position=cell["position"], case_key=cell["case_key"], mode=cell["mode"],
-                                 repetition=cell["repetition"], status="pending")
-            session.add(item)
-            items.append(item)
-        update_summary(benchmark, session)
-        benchmark_id = benchmark.id
-        # Use scalar identities outside transaction boundaries, even with expiring sessions.
-        schedule = [(item.id, item.experiment_id, item.mode) for item in items]
+                                 repetition=cell["repetition"], status="pending"))
+    update_summary(benchmark, session)
+    return benchmark.id
 
+
+def run_benchmark(request: BenchmarkRequest, session: Session) -> UUID:
+    # Inline CLI/testing entry point shares exactly the same scheduled execution path.
+    with session.begin():
+        benchmark_id = prepare_benchmark(request, session)
+    execute_benchmark(benchmark_id, session)
+    return benchmark_id
+
+
+def execute_benchmark(benchmark_id: UUID, session: Session, *, lease: Lease | None = None) -> None:
+    with session.begin():
+        if lease and lease.check(session).benchmark_id != benchmark_id:
+            raise ValueError("Job target does not match benchmark")
+        schedule = list(session.execute(select(BenchmarkItem.id, BenchmarkItem.experiment_id, BenchmarkItem.mode)
+                                        .where(BenchmarkItem.benchmark_id == benchmark_id).order_by(BenchmarkItem.position)))
     for item_id, experiment_id, mode in schedule:
         with session.begin():
+            if lease:
+                lease.check(session)
+            elif reservation(session, experiment_id):
+                raise HTTPException(409, "This benchmark is reserved by a durable job.")
             item = session.get(BenchmarkItem, item_id)
+            if item.status in {"completed", "failed"}:
+                continue
+            if item.status != "pending":
+                raise ValueError("Interrupted cells require recovery before continuation")
             item.status = "running"
-        # Single-run execution owns its short transactions. No suite transaction wraps it.
         execution_error = False
         try:
-            start_run(experiment_id, mode, session, run_id=item_id)
+            arguments = {"run_id": item_id}
+            if lease:
+                arguments["lease"] = lease
+            start_run(experiment_id, mode, session, **arguments)
+        except LeaseLost:
+            session.rollback()
+            raise
         except Exception as exc:
             session.rollback()
             execution_error = True
             logger.error("Benchmark item execution interrupted: %s", type(exc).__name__)
         with session.begin():
+            if lease:
+                lease.check(session)
             item = session.get(BenchmarkItem, item_id)
-            # Stable execution identity recovers evidence saved before a late exception.
             saved = session.get(AgentRun, item_id)
+            if lease and saved is not None and saved.status == "running":
+                interrupt_run(saved, session)
             item.run_id = saved.id if saved else None
             if saved is not None and saved.status in {"completed", "failed"}:
                 item.status = "completed"
@@ -120,14 +144,13 @@ def run_benchmark(request: BenchmarkRequest, session: Session) -> UUID:
             else:
                 item.status = "failed"
                 item.error = "Execution infrastructure did not produce a terminal result. No automatic retry was made."
-            benchmark = session.get(Benchmark, benchmark_id)
-            update_summary(benchmark, session)
-
+            update_summary(session.get(Benchmark, benchmark_id), session)
     with session.begin():
+        if lease:
+            lease.check(session)
         benchmark = session.get(Benchmark, benchmark_id)
         benchmark.status = "failed" if benchmark.summary["overall"]["infrastructure_failed"] else "completed"
         benchmark.finished_at = datetime.now(timezone.utc)
-    return benchmark_id
 
 
 def read_benchmark(benchmark_id: UUID, session: Session) -> BenchmarkDetail:

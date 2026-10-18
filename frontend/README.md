@@ -46,7 +46,7 @@ The root `.nvmrc` records the Node.js version used for setup. If you use nvm, ru
 
 ## Current learning checkpoint
 
-The page saves drafts and executes one supported scenario per experiment. Start PostgreSQL and the backend using the backend README, then try:
+The page saves drafts and executes one supported scenario per experiment. Start PostgreSQL and the backend using the backend README, and a separate backend worker (`uv run --env-file .env python -m app.worker`), then try:
 
 1. Enter an experiment name and agent-version label, select scenarios, and save a draft.
 2. Submit a name made of several spaces to see the backend reject it.
@@ -59,7 +59,7 @@ The page saves drafts and executes one supported scenario per experiment. Start 
 9. Run the claim-only demo on the same experiment. It intentionally claims success without issuing a refund: execution completes, but the task verdict fails. Reload and refresh history to verify both verdicts persist.
 10. Save a new draft with only Response lost after refund commits selected; deselect Normal execution. Run the baseline, then the recovery demo. Compare execution status, the actual injection flag, and the tool sequence. See [the timeout walkthrough](../docs/timeout-after-commit.md).
 
-The page and evidence items are Server Components. `ExperimentForm`, `ExperimentList`, and `ExperimentRunner` use `"use client"` for state, events, and browser fetching. Saving a draft does not run an agent. Failed save or execution responses can be ambiguous; refresh the relevant history before retrying rather than assuming nothing was stored. The run request waits up to 90 seconds in the browser; aborting that wait does not cancel backend execution.
+The page and evidence items are Server Components. `ExperimentForm`, `ExperimentList`, and `ExperimentRunner` use `"use client"` for state, events, and browser fetching. Saving a draft does not run an agent. Failed save or execution responses can be ambiguous; refresh the relevant history before retrying rather than assuming nothing was stored. The browser waits up to ten seconds for a durable job receipt. It then polls GET job status and loads saved evidence on completion. A retained request UUID makes an explicit retry safe after a lost acceptance response; leaving the page does not cancel accepted work.
 
 Read [the persistence walkthrough](../docs/experiment-persistence.md) and [execution walkthrough](../docs/agent-execution.md) alongside the component code. The list displays up to 20 experiments and refreshes after a save. Run panels retrieve the latest 10 runs on demand. Refresh saved experiments to update the experiment status after running.
 
@@ -80,8 +80,10 @@ The initial full `npm audit` reports five high-severity entries in the developme
 
 Try **Permission denied** with the baseline and recovery demos. Compare failed refund correctness with passed recovery policy for the safe refusal, as explained in [the permission walkthrough](../docs/permission-and-policy.md). Normal runs show recovery as not applicable; unexercised faults show not evaluable. Older runs retain their unevaluated policy history.
 
-The execution selector now defaults to **Ollama — local model, no API key**. The backend owns the loopback endpoint and installed model choice. Local model runs allow a longer request wait and retain the same refresh-before-retry behavior. OpenAI and scripted drivers remain explicit options. See [local Ollama design and validation](../docs/ollama-local.md).
+The execution selector now defaults to **Ollama — local model, no API key**. The backend owns the loopback endpoint and installed model choice. Local model jobs run in a separate worker and retain request tracking across ambiguous submissions. OpenAI and scripted drivers remain explicit options. See [local Ollama design and validation](../docs/ollama-local.md).
 
-The `/compare` page links from the experiments page. `run-comparison-panel.tsx` reads saved choices and server-owned rules; `comparison-report.tsx` displays verdicts, measurements, changes, and evidence. `benchmark-panel.tsx` separately displays saved scripted counts and cells. Neither panel executes an agent. Runtime contracts live in `src/lib/comparisons.ts` and `src/lib/model-telemetry.ts`. `npm test` compiles contract tests into ignored `.test-build/` and uses Node’s built-in runner. See the [comparison walkthrough](../docs/run-comparisons.md).
+The `/compare` page links from the experiments page. `run-comparison-panel.tsx` reads saved choices and server-owned rules; `comparison-report.tsx` displays verdicts, measurements, changes, and evidence. `benchmark-panel.tsx` displays saved scripted counts and cells, with a separate queue control for a new collection. Reading or comparing saved evidence never executes an agent. Runtime contracts live in `src/lib/comparisons.ts` and `src/lib/model-telemetry.ts`. `npm test` compiles contract tests into ignored `.test-build/` and uses Node’s built-in runner. See the [comparison walkthrough](../docs/run-comparisons.md).
 
 Saved run history, comparisons, and benchmark cells now show tool-policy and typed-report grounding grades. `src/lib/assurance.ts` validates the new contracts; `assurance-evaluation.tsx` explains check results and distinguishes reported facts from verified support. Older runs show that these checks were not evaluated. The backend must be migrated before reading runs with this frontend. See [security and grounding](../docs/security-and-grounding.md).
+
+The [durable-worker walkthrough](../docs/durable-workers.md) covers queue controls, safe submission identities, job monitoring, and interrupted-state semantics. Run panels load recent jobs when opened. `job-monitor.tsx` polls without resubmitting work, and `benchmark-queue.tsx` queues a scripted nine-cell suite from `/compare`. Interrupted runs display unknown final state/fault outcome and do not qualify for terminal comparisons.

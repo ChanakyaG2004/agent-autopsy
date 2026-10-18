@@ -1,5 +1,7 @@
 # First agent execution milestone
 
+Current HTTP execution uses [durable jobs and workers](durable-workers.md). This earlier checkpoint documents the shared inline engine; synchronous HTTP routes now require an explicit debugging opt-in.
+
 Historical execution checkpoint. The next branch adds [Phoenix tracing](phoenix-tracing.md) around this same loop; the execution and persistence boundaries described here still apply.
 
 This milestone adds an explicit tool loop for `refund-v1`, with the `normal` scenario only. It establishes the evidence path for later Phoenix tracing and fault experiments. It does not implement those later milestones.

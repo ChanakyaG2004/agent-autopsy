@@ -15,10 +15,10 @@ const labels: Record<string, string> = {
   fault_scenario: "Recovery scenario",
 };
 
-export function RecoveryPolicy({ evaluation, running }: {
-  evaluation: RecoveryEvaluation | null; running: boolean;
+export function RecoveryPolicy({ evaluation, running, interrupted = false }: {
+  evaluation: RecoveryEvaluation | null; running: boolean; interrupted?: boolean;
 }) {
-  if (!evaluation) return <p><strong>Recovery policy:</strong> {running ? "Pending execution outcome."
+  if (!evaluation) return <p><strong>Recovery policy:</strong> {interrupted ? "Unavailable after interruption; fault outcome is unknown." : running ? "Pending execution outcome."
     : "Not evaluated for this historical run. Run again to evaluate fresh evidence."}</p>;
   const label = { passed: "Passed", failed: "Failed", not_evaluable: "Not evaluable",
     not_applicable: "Not applicable" }[evaluation.verdict];

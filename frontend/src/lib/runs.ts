@@ -9,7 +9,7 @@ export type ExecutionMode = "demo" | "demo_claim_only" | "demo_reconcile" | "ope
 export interface AgentRun {
   id: string;
   experiment_id: string;
-  status: "running" | "completed" | "failed";
+  status: "running" | "completed" | "failed" | "interrupted";
   mode: ExecutionMode;
   scenario: "normal" | "timeout_after_commit" | "permission_denied";
   fault_injected: boolean;
@@ -47,7 +47,7 @@ export function isAgentRun(value: unknown): value is AgentRun {
   if (!isRecord(value)) return false;
   return typeof value.id === "string" && uuid.test(value.id) &&
     typeof value.experiment_id === "string" && uuid.test(value.experiment_id) &&
-    ["running", "completed", "failed"].includes(String(value.status)) &&
+    ["running", "completed", "failed", "interrupted"].includes(String(value.status)) &&
     (value.mode === "demo" || value.mode === "demo_claim_only" || value.mode === "demo_reconcile" || value.mode === "openai" || value.mode === "ollama") &&
     (value.scenario === "normal" || value.scenario === "timeout_after_commit" || value.scenario === "permission_denied") &&
     typeof value.fault_injected === "boolean" &&

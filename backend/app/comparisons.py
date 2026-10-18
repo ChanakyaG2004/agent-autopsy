@@ -93,7 +93,7 @@ def compare_sides(baseline: ComparisonSide, candidate: ComparisonSide) -> RunCom
               "Agent task-contract labels must match; provider and prompt changes are shown separately."),
         check("same_scenario", left.scenario == right.scenario, "Fault scenarios must match."),
         check("same_initial_state", left.initial_state == right.initial_state, "Business starting states must match."),
-        check("terminal_evidence", left.status != "running" and right.status != "running",
+        check("terminal_evidence", left.status in {"completed", "failed"} and right.status in {"completed", "failed"},
               "Both executions must have terminal results."),
     ])
     ledger_known = check("ledger_evidence", bool(

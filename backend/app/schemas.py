@@ -47,7 +47,7 @@ class RunRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: UUID
     experiment_id: UUID
-    status: Literal["running", "completed", "failed"]
+    status: Literal["running", "completed", "failed", "interrupted"]
     mode: Literal["demo", "demo_claim_only", "demo_reconcile", "openai", "ollama"]
     scenario: Scenario
     fault_injected: bool

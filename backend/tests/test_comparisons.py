@@ -69,6 +69,7 @@ def test_comparison_preserves_grades_and_records_signed_delta_and_prompt_change(
     ({"task": "Another task"}, "same_task"),
     ({"initial_state": {}}, "same_initial_state"),
     ({"status": "running", "finished_at": None}, "terminal_evidence"),
+    ({"status": "interrupted"}, "terminal_evidence"),
 ])
 def test_mismatched_cases_suppress_every_delta_but_preserve_raw_evidence(changes, check):
     report = compare_sides(side(), side(**changes))

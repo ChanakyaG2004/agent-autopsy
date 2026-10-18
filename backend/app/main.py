@@ -1,4 +1,5 @@
 import logging
+import os
 from contextlib import asynccontextmanager
 from typing import Annotated
 from uuid import UUID
@@ -20,6 +21,9 @@ from app.benchmark_schemas import BenchmarkDetail, BenchmarkRead, BenchmarkReque
 from app.benchmark_suite import suite_definition
 from app.models import Benchmark
 from app.comparisons import RunChoice, RunComparison, compare_runs, run_choices
+from app.jobs import enqueue_run, enqueue_benchmark
+from app.job_schemas import RunJobRequest, BenchmarkJobRequest, JobRead
+from app.models import Job
 
 logger = logging.getLogger(__name__)
 
@@ -98,6 +102,7 @@ def get_experiment(experiment_id: UUID, session: DatabaseSession) -> Experiment:
 
 @app.post("/experiments/{experiment_id}/runs", response_model=RunRead, status_code=201)
 def run_experiment(experiment_id: UUID, request: RunRequest, session: DatabaseSession) -> AgentRun:
+    require_inline_api()
     return start_run(experiment_id, request.mode, session)
 
 
@@ -119,6 +124,7 @@ def list_benchmark_suites() -> list[dict]:
 
 @app.post("/benchmarks", response_model=BenchmarkDetail, status_code=201)
 def create_benchmark(request: BenchmarkRequest, session: DatabaseSession) -> BenchmarkDetail:
+    require_inline_api()
     benchmark_id = run_benchmark(request, session)
     return read_benchmark(benchmark_id, session)
 
@@ -150,3 +156,39 @@ def list_recorded_runs(
 @app.get("/run-comparisons", response_model=RunComparison)
 def get_run_comparison(baseline_id: UUID, candidate_id: UUID, session: DatabaseSession) -> RunComparison:
     return compare_runs(baseline_id, candidate_id, session)
+
+
+def require_inline_api():
+    if os.environ.get("AGENT_AUTOPSY_SYNC_API_ENABLED", "false").lower() != "true":
+        raise HTTPException(410, "Synchronous HTTP execution is disabled. Submit a durable job instead.")
+
+
+@app.post("/experiments/{experiment_id}/jobs", response_model=JobRead, status_code=202)
+def create_run_job(experiment_id: UUID, request: RunJobRequest, session: DatabaseSession) -> Job:
+    return enqueue_run(experiment_id, request, session)
+
+
+@app.post("/benchmark-jobs", response_model=JobRead, status_code=202)
+def create_benchmark_job(request: BenchmarkJobRequest, session: DatabaseSession) -> Job:
+    return enqueue_benchmark(request, session)
+
+
+@app.get("/jobs", response_model=list[JobRead])
+def list_jobs(session: DatabaseSession, experiment_id: UUID | None = None,
+              kind: Annotated[str | None, Query(pattern="^(run|benchmark)$")] = None,
+              limit: Annotated[int, Query(ge=1, le=100)] = 20,
+              offset: Annotated[int, Query(ge=0)] = 0) -> list[Job]:
+    query = select(Job)
+    if experiment_id is not None:
+        query = query.where(Job.experiment_id == experiment_id)
+    if kind is not None:
+        query = query.where(Job.kind == kind)
+    return list(session.scalars(query.order_by(Job.created_at.desc(), Job.id.desc()).limit(limit).offset(offset)))
+
+
+@app.get("/jobs/{job_id}", response_model=JobRead)
+def get_job(job_id: UUID, session: DatabaseSession) -> Job:
+    job = session.get(Job, job_id)
+    if job is None:
+        raise HTTPException(404, "Job not found")
+    return job

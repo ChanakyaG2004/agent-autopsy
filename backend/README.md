@@ -8,7 +8,7 @@ Each new execution receives versioned deterministic ledger and recovery-policy e
 
 Tracing is opt-in. See [Phoenix tracing setup and design](../docs/phoenix-tracing.md) to start the local collector, enable export, and inspect normal/error traces. Application PostgreSQL remains independent of Phoenix's local trace store.
 
-This application owns request validation, application data, agent execution, bounded scripted benchmark execution, and deterministic evaluation. The agent runner will remain separate from HTTP handlers so a local command and, eventually, a worker can invoke the same logic.
+This application owns request validation, application data, agent execution, bounded scripted benchmark execution, and deterministic evaluation. The runner is separate from HTTP handlers; inline CLIs and the durable worker invoke the same engine.
 
 Application PostgreSQL stores benchmark definition snapshots, planned items, and experiment results. Phoenix will receive execution telemetry. Results will reference their traces by ID.
 
@@ -33,11 +33,17 @@ uv run --env-file .env alembic upgrade head
 uv run --env-file .env uvicorn app.main:app --reload --reload-dir app --host 127.0.0.1 --port 8000
 ```
 
+Run a worker in a separate terminal, also from `backend/`:
+
+```bash
+uv run --env-file .env python -m app.worker
+```
+
 Use Python 3.11 or newer. `uv sync` creates a project-local `.venv` and installs the versions recorded in `uv.lock`.
 
 `.env.example` documents the development and test database URLs. To use an existing PostgreSQL service, create dedicated databases and set those URLs in `.env` instead of running the bootstrap. Environment files are ignored by Git. The application also has the example development URL as a local default.
 
-Open http://127.0.0.1:8000/docs. `POST /experiments` saves a draft; GET listing and UUID retrieval load records. `POST /experiments/{id}/runs` synchronously executes with mode `demo` (baseline), `demo_reconcile` (scripted recovery), `demo_claim_only` (negative control), `ollama` (native local model), or configured `openai`. Scenario comes from the saved experiment, not a run-request override. GET run history defaults to 10 records, bounded at 20. Created runs return 201 even for failed executions; inspect `status`, `evaluation.verdict`, `recovery_evaluation.verdict`, `scenario`, and `fault_injected`. The validation-only endpoint remains available. `/` returns 404.
+Open http://127.0.0.1:8000/docs. `POST /experiments` saves a draft; GET listing and UUID retrieval load records. The legacy `POST /experiments/{id}/runs` synchronously executes with mode `demo` (baseline), `demo_reconcile` (scripted recovery), `demo_claim_only` (negative control), `ollama` (native local model), or configured `openai`. Scenario comes from the saved experiment, not a run-request override. GET run history defaults to 10 records, bounded at 20. Created runs return 201 even for failed executions; inspect `status`, `evaluation.verdict`, `recovery_evaluation.verdict`, `scenario`, and `fault_injected`. Synchronous execution HTTP routes return 410 by default and require `AGENT_AUTOPSY_SYNC_API_ENABLED=true` for local debugging. The browser uses `POST /experiments/{id}/jobs` with a request UUID and receives 202. A separate worker executes it, and GET job/run routes retrieve progress and evidence. The validation-only endpoint remains available. `/` returns 404.
 
 Local real-model mode uses `OLLAMA_BASE_URL` and an installed tool-capable `OLLAMA_MODEL`, with no API key. See [local Ollama setup and real validation](../docs/ollama-local.md). Optional OpenAI mode uses `OPENAI_API_KEY` and `OPENAI_MODEL` in the backend environment. Choose a model that supports Responses function calling. Do not put the key in frontend environment variables. Real model requests can incur provider charges. No key is needed for the demo. The OpenAI adapter is tested with the installed SDK over mocked HTTP transport; live model behavior is not yet verified. [Model telemetry and validation](../docs/model-telemetry.md) explains per-request usage, partial aggregates, timing, and the explicit live-validation command.
 
@@ -102,13 +108,13 @@ See [the execution walkthrough](../docs/agent-execution.md) for run lifecycle, p
 
 ## Scripted benchmarks
 
-See [the benchmark runner walkthrough](../docs/benchmark-runner.md). `GET /benchmark-suites` lists the single supported suite. `POST /benchmarks` accepts `{"repetitions":1}` and synchronously collects nine scripted executions. GET listing and UUID detail routes retain summary, manifest, and per-run evidence. No live model is selected by this suite.
+See [the benchmark runner walkthrough](../docs/benchmark-runner.md). `GET /benchmark-suites` lists the single supported suite. The opt-in legacy `POST /benchmarks` accepts `{"repetitions":1}` and synchronously collects nine scripted executions. GET listing and UUID detail routes retain summary, manifest, and per-run evidence. No live model is selected by this suite.
 
 ```bash
 uv run --env-file .env python -m app.benchmark --repetitions 1
 ```
 
-One distinct task is exercised across three scenarios and three scripted drivers. Repetitions are bounded to 1–3; more repetitions do not create new tasks. Collection status is separate from agent and evaluation outcomes. Interrupted suites have no automatic resume yet. The full application walkthrough is deferred; automated regression checks continue during implementation.
+One distinct task is exercised across three scenarios and three scripted drivers. Repetitions are bounded to 1–3; more repetitions do not create new tasks. Collection status is separate from agent and evaluation outcomes. Durable benchmark jobs recover saved outcomes and continue untouched cells; inline CLI execution still has no worker lease. The full application walkthrough is deferred; automated regression checks continue during implementation.
 
 ## Model validation
 
@@ -128,3 +134,7 @@ uv run --env-file .env python -m app.validate_model --execute --scenario normal
 ## Security and typed-report grounding
 
 See the [design and learning walkthrough](../docs/security-and-grounding.md). `app/assurance.py` owns the strict final-report contract and pure tool-policy/grounding evaluators. New grades are saved independently in nullable JSONB columns, with separate Phoenix evaluator spans. The model validation CLI now emits `model-validation-v2` and checks both grades. The tool boundary remains strict; a blocked unsafe attempt can still fail policy. Grounding reads no hidden final state, and unsupported prose stays unavailable.
+
+## Durable background jobs
+
+The [worker walkthrough](../docs/durable-workers.md) explains the PostgreSQL queue, idempotent acceptance, lease/heartbeat fencing, bounded recovery, interrupted outcomes, frozen work, and process validation. `POST /experiments/{id}/jobs` and `POST /benchmark-jobs` return 202 without provider initialization. GET `/jobs/{id}` and bounded `/jobs` retrieve receipts. Start `python -m app.worker` separately; `--once` processes at most one queued job and performs expiry recovery. Queue capacity is 100 active jobs and ownership recovery is bounded to three claims. Processing success remains separate from agent correctness.

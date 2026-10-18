@@ -5,13 +5,14 @@ from datetime import datetime, timezone
 from uuid import UUID, uuid4
 
 from fastapi import HTTPException
-from sqlalchemy import update
+from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
 from app.agent import TASK, execute_agent
 from app.evaluation import evaluate_refund, unavailable_evaluation
 from app.recovery import evaluate_recovery, unavailable_recovery
-from app.models import AgentRun, Experiment
+from app.models import AgentRun, BenchmarkItem, Experiment
+from app.jobs import Lease, reservation
 from app.assurance import evaluate_security, evaluate_grounding, unavailable_security, unavailable_grounding
 from app.model_telemetry import ModelTelemetry
 from app.providers import ProviderNotConfigured, make_driver
@@ -21,23 +22,43 @@ from app.telemetry import mark_failure, set_json, span, trace_id
 logger = logging.getLogger(__name__)
 
 
-def start_run(experiment_id: UUID, mode: str, session: Session, *, run_id: UUID | None = None) -> AgentRun:
+def start_run(experiment_id: UUID, mode: str, session: Session, *, run_id: UUID | None = None, lease: Lease | None = None) -> AgentRun:
     # Validate configuration before claiming the experiment or doing paid work.
     with session.begin():
-        experiment = session.get(Experiment, experiment_id)
+        owner = lease.check(session) if lease else None
+        experiment = session.scalar(select(Experiment).where(Experiment.id == experiment_id).with_for_update())
         if experiment is None:
             raise HTTPException(404, "Experiment not found")
         if (experiment.agent_version != "refund-v1" or len(experiment.scenarios) != 1
                 or experiment.scenarios[0] not in {"normal", "timeout_after_commit", "permission_denied"}):
             raise HTTPException(409, "Execution supports refund-v1 with exactly one scenario: normal, timeout_after_commit, or permission_denied.")
+        held = reservation(session, experiment_id)
+        if held and (lease is None or held.id != lease.job_id):
+            raise HTTPException(409, "This experiment is reserved by a durable job.")
+        if owner:
+            if owner.kind == "run":
+                if (owner.experiment_id != experiment_id or owner.run_id != run_id or owner.payload["mode"] != mode
+                        or owner.payload["scenario"] != experiment.scenarios[0] or owner.payload["agent_version"] != experiment.agent_version):
+                    raise ValueError("Job target does not match its frozen request")
+            elif session.scalar(select(BenchmarkItem.id).where(BenchmarkItem.id == run_id, BenchmarkItem.experiment_id == experiment_id,
+                                                             BenchmarkItem.benchmark_id == owner.benchmark_id, BenchmarkItem.mode == mode)) is None:
+                raise ValueError("Job target does not match its scheduled cell")
         scenario = experiment.scenarios[0]
         agent_version = experiment.agent_version
     try:
         driver, model_name = make_driver(mode)
     except ProviderNotConfigured as exc:
         raise HTTPException(503, str(exc)) from None
+    if lease:
+        driver = _LeasedDriver(driver, lease, session)
     try:
         with session.begin():
+            if lease:
+                lease.check(session)
+            session.scalar(select(Experiment.id).where(Experiment.id == experiment_id).with_for_update())
+            held = reservation(session, experiment_id)
+            if held and (lease is None or held.id != lease.job_id):
+                raise HTTPException(409, "This experiment is reserved by a durable job.")
             claimed = session.execute(
                 update(Experiment)
                 .where(Experiment.id == experiment_id, Experiment.status != "running")
@@ -58,6 +79,11 @@ def start_run(experiment_id: UUID, mode: str, session: Session, *, run_id: UUID 
             "agent.scenario": scenario,
         }) as run_span:
             captured_trace_id = trace_id(run_span)
+            if lease:
+                run_span.set_attribute("job.id", str(lease.job_id))
+                with session.begin():
+                    lease.check(session)
+                    run.trace_id = captured_trace_id
             set_json(run_span, "input", {"task": TASK})
             result = execute_agent(driver, scenario=scenario)
             try:
@@ -130,6 +156,8 @@ def start_run(experiment_id: UUID, mode: str, session: Session, *, run_id: UUID 
             if result.error:
                 mark_failure(run_span, result.error)
             with session.begin():
+                if lease:
+                    lease.check(session)
                 run.trace_id = captured_trace_id
                 run.fault_injected = result.fault_injected
                 run.evaluation = evaluation.model_dump(mode="json")
@@ -152,3 +180,17 @@ def start_run(experiment_id: UUID, mode: str, session: Session, *, run_id: UUID 
         close = getattr(driver, "close", None)
         if close:
             close()
+
+
+class _LeasedDriver:
+    def __init__(self, delegate, lease: Lease, session: Session):
+        self.delegate, self.lease, self.session = delegate, lease, session
+
+    def decide(self, history):
+        with self.session.begin():
+            self.lease.check(self.session)
+        # No database transaction spans model I/O.
+        return self.delegate.decide(history)
+
+    def __getattr__(self, name):
+        return getattr(self.delegate, name)

@@ -38,7 +38,7 @@ def database_connection(test_engine):
 
 
 @pytest.fixture
-def client(database_connection):
+def api_client(database_connection):
     def override_session():
         with Session(
             database_connection,
@@ -53,3 +53,13 @@ def client(database_connection):
             yield test_client
     finally:
         app.dependency_overrides.pop(get_session, None)
+
+
+@pytest.fixture
+def client(api_client, monkeypatch):
+    """Existing inline-engine integration tests explicitly enable the legacy HTTP adapter.
+
+    Queue/API-boundary tests use api_client, which retains production defaults.
+    """
+    monkeypatch.setenv("AGENT_AUTOPSY_SYNC_API_ENABLED", "true")
+    return api_client

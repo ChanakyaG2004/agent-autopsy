@@ -1,7 +1,7 @@
 from datetime import datetime
 from uuid import UUID, uuid4
 
-from sqlalchemy import Boolean, CheckConstraint, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint, func, text
+from sqlalchemy import Boolean, CheckConstraint, DateTime, ForeignKey, Index, Integer, String, Text, UniqueConstraint, func, text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -33,7 +33,7 @@ class Experiment(Base):
 class AgentRun(Base):
     __tablename__ = "agent_runs"
     __table_args__ = (
-        CheckConstraint("status IN ('running', 'completed', 'failed')", name="run_status"),
+        CheckConstraint("status IN ('running', 'completed', 'failed', 'interrupted')", name="run_status"),
         CheckConstraint("mode IN ('demo', 'demo_claim_only', 'demo_reconcile', 'openai', 'ollama')", name="run_mode"),
         CheckConstraint("scenario IN ('normal', 'timeout_after_commit', 'permission_denied')", name="run_scenario"),
         CheckConstraint("NOT fault_injected OR scenario IN ('timeout_after_commit', 'permission_denied')", name="run_fault_scenario"),
@@ -106,3 +106,38 @@ class BenchmarkItem(Base):
     repetition: Mapped[int] = mapped_column(Integer)
     status: Mapped[str] = mapped_column(String(16))
     error: Mapped[str | None] = mapped_column(Text)
+
+
+class Job(Base):
+    __tablename__ = "jobs"
+    __table_args__ = (
+        CheckConstraint("kind IN ('run', 'benchmark')", name="job_kind"),
+        CheckConstraint("status IN ('queued', 'running', 'succeeded', 'failed', 'interrupted')", name="job_status"),
+        CheckConstraint("attempts BETWEEN 0 AND 3", name="job_attempts"),
+        CheckConstraint("jsonb_typeof(payload) = 'object'", name="job_payload"),
+        CheckConstraint("(kind = 'run' AND experiment_id IS NOT NULL AND run_id IS NOT NULL AND benchmark_id IS NULL) OR (kind = 'benchmark' AND experiment_id IS NULL AND run_id IS NULL AND benchmark_id IS NOT NULL)", name="job_target"),
+        CheckConstraint("(status = 'running' AND lease_token IS NOT NULL AND lease_expires_at IS NOT NULL) OR (status <> 'running' AND lease_token IS NULL AND lease_expires_at IS NULL)", name="job_lease"),
+        CheckConstraint("(status IN ('queued', 'running') AND finished_at IS NULL) OR (status IN ('succeeded', 'failed', 'interrupted') AND finished_at IS NOT NULL)", name="job_finished"),
+        Index("job_active_experiment", "experiment_id", unique=True,
+              postgresql_where=text("kind = 'run' AND status IN ('queued', 'running')")),
+        Index("job_queue", "status", "created_at", "id"),
+    )
+    id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
+    request_id: Mapped[UUID] = mapped_column(unique=True)
+    request_hash: Mapped[str] = mapped_column(String(64))
+    execution_fingerprint: Mapped[str] = mapped_column(String(64))
+    kind: Mapped[str] = mapped_column(String(16))
+    status: Mapped[str] = mapped_column(String(16), server_default=text("'queued'"))
+    payload: Mapped[dict] = mapped_column(JSONB)
+    experiment_id: Mapped[UUID | None] = mapped_column(ForeignKey("experiments.id"), index=True)
+    # This identity is reserved before an AgentRun exists; it intentionally has no FK.
+    run_id: Mapped[UUID | None] = mapped_column(unique=True)
+    benchmark_id: Mapped[UUID | None] = mapped_column(ForeignKey("benchmarks.id"), unique=True)
+    attempts: Mapped[int] = mapped_column(Integer, server_default=text("0"))
+    lease_token: Mapped[UUID | None]
+    lease_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    worker_id: Mapped[str | None] = mapped_column(String(100))
+    error: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.clock_timestamp())
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

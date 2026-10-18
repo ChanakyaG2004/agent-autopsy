@@ -29,7 +29,7 @@ export function isRunChoice(v: unknown): v is RunChoice {
   return isRecord(v) && uuid(v.id) && uuid(v.experiment_id) && typeof v.experiment_name === "string" &&
     typeof v.agent_version === "string" && ["demo", "demo_reconcile", "demo_claim_only", "ollama", "openai"].includes(String(v.mode)) &&
     ["normal", "timeout_after_commit", "permission_denied"].includes(String(v.scenario)) &&
-    ["running", "completed", "failed"].includes(String(v.status)) && nullableString(v.model_name) &&
+    ["running", "completed", "failed", "interrupted"].includes(String(v.status)) && nullableString(v.model_name) &&
     date(v.started_at) && nullableString(v.instructions_sha256);
 }
 
@@ -89,7 +89,7 @@ export function isBenchmarkDetail(v: unknown): v is BenchmarkDetail {
 }
 
 export function preferredPair(runs: RunChoice[]): [string, string] | null {
-  const terminal = runs.filter(run => run.status !== "running");
+  const terminal = runs.filter(run => run.status === "completed" || run.status === "failed");
   const models = terminal.filter(run => run.mode === "ollama" || run.mode === "openai");
   for (const group of [models, terminal]) {
     for (const candidate of group) {
