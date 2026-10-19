@@ -1,0 +1,23 @@
+# Optional local weights. Sharing Ollama's network namespace preserves the
+# worker adapter's HTTP-loopback boundary; no model port is published.
+services:
+  ollama:
+    image: ollama/ollama:0.40.2
+    environment:
+      OLLAMA_HOST: 127.0.0.1:11434
+    volumes:
+      - ollama-models:/root/.ollama
+    healthcheck:
+      test: [CMD, ollama, list]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    restart: unless-stopped
+  worker:
+    network_mode: service:ollama
+    depends_on:
+      ollama:
+        condition: service_healthy
+
+volumes:
+  ollama-models:

@@ -1,0 +1,79 @@
+name: Release checks
+on: [push, pull_request, workflow_dispatch]
+permissions:
+  contents: read
+concurrency:
+  group: checks-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:16.15-bookworm
+        env:
+          POSTGRES_USER: agent_autopsy
+          POSTGRES_PASSWORD: agent_autopsy
+          POSTGRES_DB: agent_autopsy_test
+        ports: [5432:5432]
+        options: >-
+          --health-cmd "pg_isready -U agent_autopsy -d agent_autopsy_test"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      DATABASE_URL: postgresql+psycopg://agent_autopsy:agent_autopsy@127.0.0.1:5432/agent_autopsy_test
+      TEST_DATABASE_URL: postgresql+psycopg://agent_autopsy:agent_autopsy@127.0.0.1:5432/agent_autopsy_test
+      AGENT_AUTOPSY_TRACING_ENABLED: "false"
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.7.8"
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: uv sync --locked
+      - run: uv run --locked alembic upgrade head
+      - run: uv run --locked pytest -q
+      - run: uv run --locked alembic check
+
+  frontend:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: frontend
+    env:
+      NEXT_TELEMETRY_DISABLED: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+      - run: npm test
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm run build
+
+  containers:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker compose config --quiet
+      - run: docker compose -f compose.yaml -f compose.ollama.yaml config --quiet
+      - run: docker compose up --build --wait --wait-timeout 180
+      - run: python3 scripts/smoke.py
+      - name: Container diagnostics
+        if: failure()
+        run: docker compose logs --tail 100
+      - name: Stop CI containers
+        if: always()
+        run: docker compose down

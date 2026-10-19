@@ -1,0 +1,8 @@
+node_modules
+.next
+.env
+.env.*
+.test-build
+*.tsbuildinfo
+AGENTS.md
+next-env.d.ts

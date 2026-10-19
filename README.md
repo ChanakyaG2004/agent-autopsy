@@ -1,43 +1,96 @@
 # Agent Autopsy
 
-An incremental reliability testing platform for AI agents that take actions, using Arize Phoenix, OpenTelemetry, and OpenInference.
+A local AI reliability lab for tool-using agents, built with Arize Phoenix, OpenTelemetry, Next.js, FastAPI, and PostgreSQL.
 
-## Goal
+**Did the agent finish, did it change the right state, and can its report be trusted?** Agent Autopsy records and evaluates these as separate questions. Its first subject is a refund agent operating on isolated simulated orders; no real payments or customer accounts are accessed.
 
-Run tool-using agents against versioned scenarios, inject API failures, and compare the agent's claims with executed actions and actual state changes. The first test subject is an order/refund agent. Phoenix provides execution traces for investigating failures.
+## What it demonstrates
 
-## Stack
+A tool can commit a refund and then lose its response. A baseline agent stops with an unknown outcome. A recovery agent reads the order, sees the committed refund, and avoids another write. Both can leave a correct ledger while only one follows the recovery policy. A permission-denied run can safely refuse and pass policy while leaving the refund goal unmet. A claim-only control completes normally while failing the business check.
 
-- Frontend: Next.js, React, and TypeScript
-- Backend: Python, FastAPI, Pydantic, and PostgreSQL
-- AI observability: Arize Phoenix, OpenTelemetry, and OpenInference
+The platform makes these distinctions visible through saved actions, state snapshots, independent grades, comparisons, and linked Phoenix traces.
 
-## Current status
+- Three scenarios: normal execution, response lost after commit, and permission denial.
+- Explicit bounded agent loop; scripted controls and native local Ollama tool calling. OpenAI is optional.
+- Four deterministic evaluations: refund ledger, recovery trajectory, tool policy, and typed-report grounding against agent-visible evidence.
+- Durable PostgreSQL jobs, request idempotency, worker leases, heartbeats, and conservative crash recovery.
+- A versioned nine-cell scripted benchmark with frozen manifests and explicit denominators.
+- Saved-run comparisons, model identity/usage/latency measurements, and nested OpenInference traces.
+- Container packaging, readiness checks, automated regression checks, and HTTP release acceptance tests.
 
-The frontend saves experiment drafts through FastAPI and lists recent records from PostgreSQL. A `refund-v1` experiment with exactly one supported scenario (`normal`, `timeout_after_commit`, or `permission_denied`) executes a bounded loop against an isolated simulated order. Runs persist the scenario, actual fault-injection flag, agent answer, tool actions, before/after state, and versioned ledger and recovery-policy evaluations. Execution status, refund correctness, and recovery behavior remain separate.
+## Start the demo
 
-The first fault changes the refund ledger and then loses the tool response. The baseline demo stops with an unknown outcome; a recovery demo reads the order and completes without another refund request when the read confirms the full amount. Both can have a correct final ledger, but only the recovery demo passes the trajectory policy. Permission denial rejects writes before mutation; the recovery demo stops with a refusal, passing policy while leaving the refund goal unmet. The claim-only negative control still demonstrates completed execution with an incorrect ledger.
+Install Docker with Compose, then from the repository root:
 
-Optional OpenTelemetry tracing sends run, decision, tool, evaluator, and actual model-request spans to local Arize Phoenix; saved runs link to their traces. Demo drivers need no model key and emit no LLM spans. Ollama is the default real-model provider and runs installed tool-capable weights locally without an API key. Native measurements include model identity/digest, latency, usage coverage, and token counts in PostgreSQL and Phoenix. One real local validation passed in each supported scenario; an earlier model failure is preserved. OpenAI remains an optional adapter, unverified against a live paid provider. A versioned scripted benchmark runs the fixed task across all three scenarios and drivers, saving manifests, source/configuration fingerprints, item evidence, and separate aggregate counts. This first suite contains one distinct task and nine execution cells. Repeated live-model benchmark comparisons and general model-based answer evaluations are not implemented yet.
-
-The comparison page at `/compare` shows saved executions side by side: independent verdicts, configuration changes, coverage-aware measurements, and trace links. A separate benchmark table compares scripted policies with explicit denominators and per-cell evidence. A single pair is not a reliability claim. See the [comparison walkthrough](docs/run-comparisons.md).
-
-New runs also persist a tool-policy audit and typed-report grounding against agent-visible evidence. The two checks remain independent of business success. Historical answers stay ungraded; arbitrary prose is not semantically scored. See the [security and grounding walkthrough](docs/security-and-grounding.md).
-
-Agent and benchmark submissions now use a durable PostgreSQL queue and separate workers. Request IDs prevent duplicate submissions; renewable leases fence stale publishers. Recovery retains saved outcomes, continues untouched benchmark cells, and explicitly marks unknown executions interrupted without replaying them. See the [worker design and walkthrough](docs/durable-workers.md).
-
-Development proceeds in small, explained steps, with a focus on understanding each design decision before expanding the system.
-
-## Repository layout
-
-```text
-frontend/   Next.js page, typed components, draft form, and saved run inspection
-backend/    FastAPI, PostgreSQL, explicit agent loop, simulated tools, and tests
-docs/       Architecture exercises and design decisions
+```bash
+docker compose up --build --wait
+python3 scripts/smoke.py
 ```
 
-See [frontend setup](frontend/README.md) and [backend/PostgreSQL setup](backend/README.md) for commands and file explanations. Run the two development servers in separate terminals. PostgreSQL is needed for application data. Follow the [Phoenix tracing walkthrough](docs/phoenix-tracing.md) to start the optional local collector and capture real traces.
+Open [the application](http://127.0.0.1:3000), [comparisons and benchmarks](http://127.0.0.1:3000/compare), or [API documentation](http://127.0.0.1:8000/docs).
 
-## Next milestone
+The base stack needs no model download or API key. On an experiment's execution panel choose a **scripted demo** driver; the default Ollama option requires the optional model service. On `/compare`, queue a scripted benchmark to see all controls. The smoke command creates a real saved nine-cell collection and verifies its expected failures as well as successes.
 
-Use the [benchmark runner walkthrough](docs/benchmark-runner.md) for the fixed suite, API/CLI, reproducibility snapshots, failure semantics, and explicit metric denominators. The [permission and policy walkthrough](docs/permission-and-policy.md) explains the independent outcomes. The [local Ollama walkthrough](docs/ollama-local.md) documents native tool calling, local execution boundaries, measurements, and actual validation results. The earlier [OpenAI telemetry walkthrough](docs/model-telemetry.md) remains available. Next: release packaging with Docker Compose, CI, startup checks, and consolidated documentation. The application walkthrough is deferred while we work through release milestones one at a time. The [project rundown](docs/project-rundown.md), [execution walkthrough](docs/agent-execution.md), [tracing walkthrough](docs/phoenix-tracing.md), and [evaluation walkthrough](docs/refund-evaluation.md) document earlier checkpoints.
+Stop with `docker compose down`; named volumes preserve data. The [release guide](docs/release.md) covers optional Phoenix and Ollama, native development, alternate ports, operation, and troubleshooting. Keep this unauthenticated demo on localhost.
+
+## System design
+
+```mermaid
+flowchart LR
+    Browser[Next.js browser UI] -->|HTTP: drafts, jobs, evidence| API[FastAPI]
+    API -->|Atomic acceptance and queries| DB[(PostgreSQL)]
+    Worker[Separate leased worker] -->|Claim, renew, save, recover| DB
+    Worker --> Agent[Bounded agent loop]
+    Agent --> Model[Scripted driver or local Ollama]
+    Agent --> Tools[Isolated refund tools + faults]
+    Agent --> Evals[Ledger / recovery / policy / grounding]
+    Worker -. OpenTelemetry + OpenInference .-> Phoenix[Arize Phoenix]
+    Browser -. Trace links .-> Phoenix
+```
+
+PostgreSQL owns application outcomes; Phoenix owns diagnostic traces. Export failure does not change an evaluation. A worker crash without terminal evidence produces an explicitly interrupted run, never an automatic replay of uncertain actions.
+
+Read the [architecture](docs/architecture.md), [complete project rundown](docs/project-rundown.md), and [release verification record](docs/release-verification.md).
+
+## Development and checks
+
+Native setup is documented in [backend](backend/README.md) and [frontend](frontend/README.md). Use Python 3.11, Node 22.13.0, uv 0.7.8, and PostgreSQL 16. Dependency resolution is committed in `backend/uv.lock` and `frontend/package-lock.json`.
+
+```bash
+# backend/, with PostgreSQL and a dedicated TEST_DATABASE_URL ending in _test
+uv sync --locked
+uv run --env-file .env pytest -q
+uv run --env-file .env alembic check
+
+# frontend/
+npm ci
+npm test
+npm run lint
+npm run typecheck
+npm run build
+```
+
+GitHub Actions runs backend integration tests with PostgreSQL, frontend checks, and a fresh Compose stack plus the HTTP smoke test. It does not request paid inference or download model weights.
+
+## Scope and limits
+
+This is a completed first local release, not an internet-facing production service. There is one distinct refund task, three scenarios, and three scripted policies in the fixed suite. Nine cells are not nine distinct tasks. Repetitions do not establish general model reliability. Live-model runs are individual observations; no reliability rate or cost savings are claimed.
+
+Grounding verifies the typed report contract; arbitrary prose is not semantically graded. The tool audit is not a comprehensive prompt-injection defense. Real payment APIs would require durable business idempotency and reconciliation beyond this in-memory sandbox. OpenAI is tested through mocked SDK transport, without live paid validation.
+
+Future extensions—broader datasets, repeated model benchmarks, failure clustering, retrieval attacks, calibrated model judges, authentication, Kubernetes, and cloud deployment—are explicitly outside this release. See the [scope and next directions](docs/project-rundown.md#scope-and-next-directions).
+
+## Code map
+
+| Location | Responsibility |
+| --- | --- |
+| `frontend/src/components` | Drafts, queue controls, saved evidence, comparisons |
+| `frontend/src/lib` | Runtime response contracts and submission tracking |
+| `backend/app/agent.py`, `tools.py` | Explicit loop and simulated fault boundary |
+| `backend/app/execution.py`, `jobs.py`, `worker.py` | Shared execution, durable queue, leases and recovery |
+| `backend/app/evaluation.py`, `recovery.py`, `assurance.py` | Independent deterministic grades |
+| `backend/app/telemetry.py`, `ollama_provider.py` | Trace export and actual model measurements |
+| `backend/migrations`, `backend/tests`, `frontend/tests` | Schema history and regression checks |
+| `compose.yaml`, `.github/workflows/ci.yml`, `scripts/smoke.py` | Local release operation and acceptance |
+
+The `docs/` walkthroughs retain the incremental design history. Current startup commands live in the release guide; earlier walkthroughs describe their original checkpoints.

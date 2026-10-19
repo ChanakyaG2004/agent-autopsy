@@ -1,5 +1,7 @@
 # Frontend
 
+The [release guide](../docs/release.md) is the current reference for Docker startup, optional services, alternate ports, and acceptance checks. This document explains native frontend development.
+
 The Next.js App Router application uses React and TypeScript, with plain CSS and ESLint.
 
 This application will own pages, forms, navigation, and presentation of experiment results, including loading and error states. It will request application data through the FastAPI API.

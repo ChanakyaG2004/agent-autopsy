@@ -1,5 +1,7 @@
 # Durable jobs and background workers
 
+The [release guide](release.md) now covers packaged startup and full acceptance checks. This document explains the worker milestone and its original verification.
+
 Agent and benchmark execution now runs in a separate worker process. HTTP submission saves a job and returns **202 Accepted**; it does not initialize a model provider or wait for inference. Closing the browser does not cancel accepted work. Refreshing or polling reads stored status rather than resubmitting an agent.
 
 ## Why PostgreSQL first?

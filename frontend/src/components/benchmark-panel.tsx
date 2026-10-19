@@ -65,7 +65,7 @@ export function BenchmarkPanel() {
     <button className="secondary-button" onClick={() => { setSelected(""); setRevision(value => value + 1); }}>Refresh saved benchmarks</button>
     {listStatus === "loading" && <p role="status">Loading saved benchmarks…</p>}
     {listStatus === "error" && <p role="alert" className="message error">Could not load benchmarks. Check the API and refresh.</p>}
-    {listStatus === "success" && benchmarks.length === 0 && <p>No benchmark has been collected. Run the benchmark CLI described in the project’s benchmark walkthrough, then refresh.</p>}
+    {listStatus === "success" && benchmarks.length === 0 && <p>No benchmark has been collected. Queue a scripted benchmark above to create the first collection.</p>}
     {listStatus === "success" && benchmarks.length > 0 && <>
       <label className="benchmark-select">Saved benchmark (latest 20)<select value={selected} onChange={event => setSelected(event.target.value)}>
         {benchmarks.map(row => <option key={row.id} value={row.id}>{row.suite_version} · {row.status} · {new Date(row.started_at).toLocaleString()} · {row.id.slice(0, 8)}</option>)}

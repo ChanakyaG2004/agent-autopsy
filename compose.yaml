@@ -1,0 +1,103 @@
+name: agent-autopsy
+
+x-backend: &backend
+  image: agent-autopsy-backend:local
+  build:
+    context: ./backend
+    target: runtime
+  environment: &backend-environment
+    DATABASE_URL: postgresql+psycopg://agent_autopsy:agent_autopsy@postgres:5432/agent_autopsy
+    AGENT_AUTOPSY_SYNC_API_ENABLED: "false"
+    AGENT_AUTOPSY_FRONTEND_ORIGINS: http://localhost:${FRONTEND_PORT:-3000},http://127.0.0.1:${FRONTEND_PORT:-3000}
+    AGENT_AUTOPSY_TRACING_ENABLED: ${AGENT_AUTOPSY_TRACING_ENABLED:-false}
+    PHOENIX_OTLP_ENDPOINT: http://phoenix:6006/v1/traces
+    OLLAMA_BASE_URL: http://127.0.0.1:11434
+    OLLAMA_MODEL: ${OLLAMA_MODEL:-llama3.1:latest}
+  init: true
+
+services:
+  postgres:
+    image: postgres:16.15-bookworm
+    environment:
+      POSTGRES_USER: agent_autopsy
+      POSTGRES_PASSWORD: agent_autopsy
+      POSTGRES_DB: agent_autopsy
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: [CMD-SHELL, "pg_isready -U agent_autopsy -d agent_autopsy"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  migrate:
+    <<: *backend
+    command: [alembic, upgrade, head]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+
+  api:
+    <<: *backend
+    command: [sh, -c, "python -m app.preflight && exec uvicorn app.main:app --host 0.0.0.0 --port 8000"]
+    ports:
+      - "127.0.0.1:${API_PORT:-8000}:8000"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test: [CMD, python, -c, "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health/ready', timeout=4)"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+    restart: unless-stopped
+
+  worker:
+    <<: *backend
+    command: [sh, -c, "python -m app.preflight && exec python -m app.worker"]
+    depends_on:
+      api:
+        condition: service_healthy
+    stop_grace_period: 5m
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        NEXT_PUBLIC_API_BASE_URL: http://127.0.0.1:${API_PORT:-8000}
+        NEXT_PUBLIC_PHOENIX_BASE_URL: http://127.0.0.1:${PHOENIX_PORT:-6006}
+    ports:
+      - "127.0.0.1:${FRONTEND_PORT:-3000}:3000"
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: [CMD, node, -e, "fetch('http://127.0.0.1:3000').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+    init: true
+    restart: unless-stopped
+
+  phoenix:
+    profiles: [observability]
+    build:
+      context: ./backend
+      target: observability
+    ports:
+      - "127.0.0.1:${PHOENIX_PORT:-6006}:6006"
+    volumes:
+      - phoenix-data:/data
+    healthcheck:
+      test: [CMD, python, -c, "import urllib.request; urllib.request.urlopen('http://127.0.0.1:6006', timeout=4)"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    init: true
+    restart: unless-stopped
+
+volumes:
+  postgres-data:
+  phoenix-data:

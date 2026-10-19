@@ -24,6 +24,7 @@ from app.comparisons import RunChoice, RunComparison, compare_runs, run_choices
 from app.jobs import enqueue_run, enqueue_benchmark
 from app.job_schemas import RunJobRequest, BenchmarkJobRequest, JobRead
 from app.models import Job
+from app.health import database_ready
 
 logger = logging.getLogger(__name__)
 
@@ -40,12 +41,26 @@ app = FastAPI(title="Agent Autopsy API", version="0.1.0", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],
+    allow_origins=[origin.strip() for origin in os.environ.get(
+        "AGENT_AUTOPSY_FRONTEND_ORIGINS", "http://localhost:3000,http://127.0.0.1:3000"
+    ).split(",") if origin.strip()],
     allow_methods=["GET", "POST"],
     allow_headers=["Content-Type"],
 )
 
 DatabaseSession = Annotated[Session, Depends(get_session)]
+
+
+@app.get("/health/live")
+def liveness() -> dict:
+    return {"status": "alive"}
+
+
+@app.get("/health/ready")
+def readiness(session: DatabaseSession) -> JSONResponse:
+    ready = database_ready(session)
+    return JSONResponse(status_code=200 if ready else 503,
+                        content={"status": "ready" if ready else "unavailable"})
 
 
 @app.exception_handler(SQLAlchemyError)

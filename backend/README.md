@@ -1,5 +1,7 @@
 # Backend
 
+For the complete local release, container commands, startup checks, and troubleshooting, use the [release guide](../docs/release.md). The native development details below remain useful when working on backend code.
+
 The FastAPI application validates configurations, saves experiments, and executes `refund-v1` with exactly one supported scenario: `normal`, `timeout_after_commit`, or `permission_denied`. Run evidence is stored in PostgreSQL. The API defaults to the deterministic demo when mode is omitted. The UI and validation CLI default to the local Ollama model.
 
 The [timeout-after-commit walkthrough](../docs/timeout-after-commit.md) explains one-shot response loss, unknown outcomes, and the separate recovery demo. The [permission and policy walkthrough](../docs/permission-and-policy.md) adds definitive denial and independent trajectory grading. Multi-scenario execution remains unsupported.
@@ -114,7 +116,7 @@ See [the benchmark runner walkthrough](../docs/benchmark-runner.md). `GET /bench
 uv run --env-file .env python -m app.benchmark --repetitions 1
 ```
 
-One distinct task is exercised across three scenarios and three scripted drivers. Repetitions are bounded to 1–3; more repetitions do not create new tasks. Collection status is separate from agent and evaluation outcomes. Durable benchmark jobs recover saved outcomes and continue untouched cells; inline CLI execution still has no worker lease. The full application walkthrough is deferred; automated regression checks continue during implementation.
+One distinct task is exercised across three scenarios and three scripted drivers. Repetitions are bounded to 1–3; more repetitions do not create new tasks. Collection status is separate from agent and evaluation outcomes. Durable benchmark jobs recover saved outcomes and continue untouched cells; inline CLI execution still has no worker lease. The release acceptance command and browser walkthrough are documented in the [release guide](../docs/release.md).
 
 ## Model validation
 
@@ -125,7 +127,7 @@ uv run --env-file .env python -m app.validate_model
 uv run --env-file .env python -m app.validate_model --execute --scenario normal
 ```
 
-`RunRead.model_telemetry` is null for scripted and historical runs. Ollama and OpenAI runs record provider-correct requested/reported model, request settings and fingerprints, per-attempt timing/status/usage, and coverage-aware known usage. Usage missing after a timeout is unknown, not zero. No dollar cost is estimated. The local provider has passed one real validation per supported scenario; optional OpenAI activation remains pending its credentials and model. The full application walkthrough remains deferred.
+`RunRead.model_telemetry` is null for scripted and historical runs. Ollama and OpenAI runs record provider-correct requested/reported model, request settings and fingerprints, per-attempt timing/status/usage, and coverage-aware known usage. Usage missing after a timeout is unknown, not zero. No dollar cost is estimated. Individual local-model observations for all supported scenarios are recorded in the [verification record](../docs/release-verification.md); optional OpenAI activation remains pending its credentials and model.
 
 ## Recorded comparisons
 

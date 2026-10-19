@@ -10,7 +10,7 @@ export default function Home() {
       <p>
         Test AI agents under controlled API failures, inspect their execution
         traces, and compare what they report with what actually changed. Our
-        first test subject is an agent that cancels orders and issues refunds.
+        first test subject is an agent that issues refunds on simulated orders.
       </p>
 
       <h2>Three kinds of execution evidence</h2>
