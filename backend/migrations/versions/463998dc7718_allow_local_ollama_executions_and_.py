@@ -11,7 +11,6 @@ from alembic import op
 import sqlalchemy as sa
 
 
-# revision identifiers, used by Alembic.
 revision: str = '463998dc7718'
 down_revision: Union[str, Sequence[str], None] = '53242250fbfc'
 branch_labels: Union[str, Sequence[str], None] = None
@@ -29,7 +28,6 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     """Downgrade schema."""
-    # The old constraint refuses a downgrade if any Ollama history would be invalidated.
     op.drop_constraint('run_mode', 'agent_runs', type_='check')
     op.create_check_constraint('run_mode', 'agent_runs', "mode IN ('demo', 'demo_claim_only', 'demo_reconcile', 'openai')")
     op.drop_constraint('run_model_telemetry_object', 'agent_runs', type_='check')

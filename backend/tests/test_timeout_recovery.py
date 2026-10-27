@@ -108,7 +108,6 @@ def test_blind_retry_is_refused_by_business_guard_without_duplicate_refund():
     assert "exceed" in result.error
     assert result.final_state["refunded_cents"] == 4900
     assert len(result.final_state["refunds"]) == 1
-    # A passing ledger verdict alone does not establish a safe recovery policy.
     assert evaluate_refund(result.final_state).verdict == "passed"
 
 

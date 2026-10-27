@@ -32,7 +32,7 @@ export function BenchmarkQueue({ onFinished }: { onFinished: () => void }) {
     setBusy(true); setError("");
     try {
       setJob(await submitJob("/benchmark-jobs", { repetitions: 1 }, "agent-autopsy:benchmark-submission"));
-      onFinished(); // Refresh the newly committed schedule, not just finished results.
+      onFinished();
     } catch (error) { setError(error instanceof Error ? error.message : "Could not confirm acceptance. Refresh jobs before retrying."); }
     finally { setBusy(false); }
   }

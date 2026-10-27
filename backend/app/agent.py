@@ -92,13 +92,11 @@ def execute_agent(driver: Driver, scenario: str = "normal") -> RunResult:
                         try:
                             result = sandbox.execute(call.name, call.arguments)
                         except (ToolResponseTimeout, ToolPermissionDenied) as exc:
-                            # Both injected errors follow strict argument and scope validation.
                             set_json(tool_span, "input", call.arguments)
                             tool_span.set_attribute("fault.type", "timeout_after_commit"
                                                     if isinstance(exc, ToolResponseTimeout) else "permission_denied")
                             tool_span.set_attribute("fault.injected", True)
                             raise
-                        # Successful execution establishes strict types, scope, and no extra fields.
                         set_json(tool_span, "input", call.arguments)
                         set_json(tool_span, "output", {
                             "order_id": result["order_id"],
@@ -111,7 +109,6 @@ def execute_agent(driver: Driver, scenario: str = "normal") -> RunResult:
                                             if timeout else ("PERMISSION_DENIED", "rejected", "permission_denied"))
                     step.update({"error": str(exc), "error_code": code,
                                  "outcome": outcome, "fault": fault})
-                    # Driver-visible feedback deliberately omits actual state and injection metadata.
                     feedback = {"evidence_turn": turn_number, "error": {"code": code, "outcome": outcome,
                                            "message": str(exc)}}
                     history.append({"type": "function_call_output", "call_id": call.call_id,

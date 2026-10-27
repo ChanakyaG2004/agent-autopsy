@@ -42,7 +42,6 @@ export async function submitJob(path: string, fields: Record<string, string | nu
   try {
     const saved = localStorage.getItem(storageKey);
     body = submissionBody(saved === null ? null : JSON.parse(saved), fields, crypto.randomUUID());
-    // Persist before POST so an ambiguous response/reload retains the same identity.
     localStorage.setItem(storageKey, JSON.stringify(body));
   } catch (error) {
     throw new Error(error instanceof Error ? error.message : "Could not save submission tracking in this browser.");
@@ -53,7 +52,6 @@ export async function submitJob(path: string, fields: Record<string, string | nu
   if (!response.ok || !isJob(result) || result.request_id !== body.request_id ||
       ("mode" in fields ? result.kind !== "run" || path !== `/experiments/${result.experiment_id}/jobs` : result.kind !== "benchmark")) {
     const message = record(result) && typeof result.detail === "string" ? result.detail : "Could not confirm job acceptance.";
-    // A definitive rejection did not accept this request. Network/5xx remains ambiguous.
     if (response.status >= 400 && response.status < 500) localStorage.removeItem(storageKey);
     throw new Error(`${message} Refresh jobs before submitting again.`);
   }

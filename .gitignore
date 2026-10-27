@@ -1,9 +1,7 @@
-# Local configuration and secrets
 .env
 .env.*
 !.env.example
 
-# Python
 __pycache__/
 *.py[cod]
 .venv/
@@ -14,21 +12,17 @@ __pycache__/
 .coverage
 htmlcov/
 
-# JavaScript / Next.js
 node_modules/
 .next/
 out/
 *.tsbuildinfo
 next-env.d.ts
 
-# Generated artifacts
 dist/
 build/
 coverage/
 *.log
 
-# macOS
 .DS_Store
 
-# Compiled frontend contract tests
 .test-build/

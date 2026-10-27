@@ -232,7 +232,7 @@ def test_phoenix_receives_allowlisted_model_usage_and_keeps_unknown_tokens_absen
         root = next(item for item in spans if item.name == "agent.run")
         assert root.attributes["agent.model_requests"] == len(requests)
         assert root.attributes["agent.usage_complete"] is (not error)
-        assert "llm.token_count.total" not in root.attributes  # Avoid counting usage twice.
+        assert "llm.token_count.total" not in root.attributes
         for request in requests:
             assert request.attributes["openinference.span.kind"] == "LLM"
             assert request.attributes["agent.request_duration_ms"] >= 0

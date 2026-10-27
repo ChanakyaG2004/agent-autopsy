@@ -21,7 +21,6 @@ def upgrade():
 
 
 def downgrade():
-    # Refuse a lossy downgrade once any new assurance evidence has been saved.
     op.create_check_constraint("run_downgrade_no_assurance", "agent_runs",
                                "security_evaluation IS NULL AND grounding_evaluation IS NULL")
     op.drop_constraint("run_downgrade_no_assurance", "agent_runs", type_="check")

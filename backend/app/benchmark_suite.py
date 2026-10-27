@@ -53,7 +53,7 @@ def build_manifest(repetitions: int, schema_revision: str) -> dict:
             cwd=backend, timeout=2, stderr=subprocess.DEVNULL, text=True,
         ).strip())
     except (OSError, subprocess.SubprocessError):
-        pass  # Packaged deployments may have no Git checkout; file hashes remain available.
+        pass
     return {
         "manifest_version": "benchmark-manifest-v1",
         "suite": suite,

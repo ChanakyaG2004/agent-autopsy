@@ -130,7 +130,6 @@ class Job(Base):
     status: Mapped[str] = mapped_column(String(16), server_default=text("'queued'"))
     payload: Mapped[dict] = mapped_column(JSONB)
     experiment_id: Mapped[UUID | None] = mapped_column(ForeignKey("experiments.id"), index=True)
-    # This identity is reserved before an AgentRun exists; it intentionally has no FK.
     run_id: Mapped[UUID | None] = mapped_column(unique=True)
     benchmark_id: Mapped[UUID | None] = mapped_column(ForeignKey("benchmarks.id"), unique=True)
     attempts: Mapped[int] = mapped_column(Integer, server_default=text("0"))

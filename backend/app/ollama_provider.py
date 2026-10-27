@@ -73,7 +73,7 @@ class OllamaDriver:
         if not model or len(model) > 200 or ":cloud" in model.lower():
             raise OllamaUnavailable("Choose an installed local OLLAMA_MODEL; cloud models are not supported.")
         self.client = requests.Session()
-        self.client.trust_env = False  # Do not send local requests through proxies or netrc authentication.
+        self.client.trust_env = False
         self.requests: list[ModelRequestMeasurement] = []
         self.instructions = INSTRUCTIONS + LOCAL_TOOL_INSTRUCTIONS
         self.tools = [{"type": "function", "function": {

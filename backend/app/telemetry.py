@@ -69,7 +69,6 @@ def span(name: str, kind: str, **attributes):
             current.set_status(trace.Status(trace.StatusCode.ERROR, "Operation failed"))
             raise
         else:
-            # Preserve an explicitly recorded handled error on a normally returning call.
             status = getattr(current, "status", None)
             if status is None or status.status_code != trace.StatusCode.ERROR:
                 current.set_status(trace.Status(trace.StatusCode.OK))

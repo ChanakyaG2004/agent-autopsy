@@ -92,7 +92,6 @@ def test_full_matrix_preserves_independent_outcomes_and_trace_links(client, monk
             assert item["experiment_id"] == item["run"]["experiment_id"]
             assert item["run"]["initial_state"]["refunds"] == []
             assert item["run"]["trace_id"] in roots
-        # Read returns the original frozen summary and manifest, even if current suite code changes.
         monkeypatch.setattr("app.benchmark_suite.TASK", "Different future task")
         assert client.get(f'/benchmarks/{report["id"]}').json() == report
         listed = client.get("/benchmarks").json()

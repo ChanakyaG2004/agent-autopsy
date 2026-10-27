@@ -43,7 +43,6 @@ class Lease:
     token: UUID
 
     def check(self, session: Session) -> Job:
-        # Caller owns the short transaction. The lock fences all protected writes.
         job = session.scalar(select(Job).where(
             Job.id == self.job_id, Job.status == "running", Job.lease_token == self.token
         ).with_for_update().execution_options(populate_existing=True))
@@ -67,7 +66,6 @@ def _existing(session: Session, request_id: UUID, request_hash: str) -> Job | No
 
 
 def _admit(session: Session, request_id: UUID, request_hash: str) -> Job | None:
-    # One small admission lock bounds capacity and makes concurrent retries deterministic.
     session.scalar(select(func.pg_advisory_xact_lock(ADMISSION_LOCK)))
     existing = _existing(session, request_id, request_hash)
     if existing:
@@ -148,7 +146,6 @@ def reconcile_benchmark(benchmark: Benchmark, session: Session, *, abandon=False
         elif abandon:
             item.status, item.error = "failed", "Collection stopped before this cell executed."
         else:
-            # No run row means the agent never started: the execution path commits it first.
             item.status, item.error = "pending", None
     update_summary(benchmark, session)
     done = benchmark.summary["overall"]["pending"] == 0

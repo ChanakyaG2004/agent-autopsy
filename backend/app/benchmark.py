@@ -91,7 +91,6 @@ def prepare_benchmark(request: BenchmarkRequest, session: Session) -> UUID:
 
 
 def run_benchmark(request: BenchmarkRequest, session: Session) -> UUID:
-    # Inline CLI/testing entry point shares exactly the same scheduled execution path.
     with session.begin():
         benchmark_id = prepare_benchmark(request, session)
     execute_benchmark(benchmark_id, session)

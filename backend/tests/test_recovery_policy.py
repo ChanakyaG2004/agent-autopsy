@@ -160,5 +160,4 @@ def test_policy_is_deterministic_and_does_not_judge_final_answer_text():
     assert grade(result) == grade(result)
     assert result == before
     result.steps[-1]["text"] = "Deliberately wrong wording: refund succeeded."
-    # Wording quality needs its own evaluator; this policy checks tool behavior only.
     assert grade(result).verdict == "passed"

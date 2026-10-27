@@ -109,7 +109,6 @@ def test_background_export_does_not_block_execution_and_catches_failure(monkeypa
         with telemetry.span("agent.run", "AGENT"):
             result = execute_agent(DemoDriver())
         assert entered.wait(5)
-        # This result exists while the exporter is still blocked.
         assert not release.is_set()
         assert result.status == "completed" and result.final_state["refunded_cents"] == 4900
     finally:

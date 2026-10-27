@@ -93,7 +93,6 @@ class RefundSandbox:
                 "refund_id": f"refund-{len(self._state['refunds']) + 1}",
                 "amount_cents": parsed.amount_cents,
             })
-            # Lose the response only after a successful sandbox state mutation.
             if self._scenario == "timeout_after_commit" and not self._fault_injected:
                 self._fault_injected = True
                 raise ToolResponseTimeout()

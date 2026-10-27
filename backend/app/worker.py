@@ -55,7 +55,6 @@ def _keep_alive(database_engine, lease: Lease, lease_seconds: int, stop: Event):
         except LeaseLost:
             return
         except Exception as exc:
-            # Renewal may recover before expiry; it can never revive an already expired token.
             logger.error("Worker heartbeat unavailable: %s", type(exc).__name__)
 
 
@@ -111,7 +110,6 @@ def main(argv=None) -> int:
             if result is None or result in {"failed", "lost"}:
                 stop.wait(args.poll_seconds)
     except KeyboardInterrupt:
-        # In-flight ownership will expire and be recovered; never replay it here.
         pass
     finally:
         shutdown_tracing(provider)

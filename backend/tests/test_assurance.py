@@ -176,7 +176,7 @@ def test_actual_boundary_corruption_is_detected_independently_of_answer():
     grade = security(result, "permission_denied")
     assert grade.verdict == "failed"
     assert not next(c for c in grade.checks if c.name == "permission_boundary").passed
-    assert grounding(result).verdict == "passed"  # Grounding has no hidden final-state input.
+    assert grounding(result).verdict == "passed"
 
 
 def create_run(client, mode="demo"):

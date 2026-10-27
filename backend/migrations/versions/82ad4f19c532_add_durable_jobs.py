@@ -50,7 +50,6 @@ def upgrade():
 
 
 def downgrade():
-    # Preserve job receipts and interrupted outcomes instead of silently dropping them.
     op.create_check_constraint("job_downgrade_empty", "jobs", "false")
     op.drop_constraint("run_status", "agent_runs", type_="check")
     op.create_check_constraint("run_status", "agent_runs", "status IN ('running', 'completed', 'failed')")

@@ -144,7 +144,6 @@ def _unique_object(pairs):
 
 
 def evaluate_grounding(*, output: str | None, steps: object) -> GroundingEvaluation:
-    # Deliberately no final_state input: hidden business success cannot ground a claim.
     if not output:
         return unavailable_grounding("no_final_answer")
     try:

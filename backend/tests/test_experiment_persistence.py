@@ -157,7 +157,6 @@ def test_run_failure_retains_partial_state(client, monkeypatch):
     assert run["status"] == "failed"
     assert run["final_state"]["refunded_cents"] == 4900
     assert len(run["steps"]) == 2
-    # The business action succeeded even though the driver failed before answering.
     assert run["evaluation"]["verdict"] == "passed"
     assert client.get(path).json()[0]["error"] == "Simulated model failure."
     assert client.get(f'/experiments/{saved["id"]}').json()["status"] == "failed"
@@ -206,7 +205,6 @@ def test_atomic_claim_blocks_a_second_run(test_engine, monkeypatch):
             try:
                 assert entered.wait(5)
                 with Session(test_engine, expire_on_commit=False) as session:
-                    # The first claim is committed and visible while the model is blocked.
                     assert session.get(Experiment, experiment_id).status == "running"
                     session.rollback()
                     with pytest.raises(HTTPException) as caught:
@@ -480,7 +478,6 @@ def test_downgrade_refuses_to_erase_permission_or_policy_evidence(test_engine, s
 
 def test_empty_policy_migration_round_trip(test_engine):
     from sqlalchemy import text
-    # Test database only; transaction rollback retains the suite's schema even on failure.
     assert test_engine.url.database.endswith("_test")
     with test_engine.connect() as connection:
         transaction = connection.begin()

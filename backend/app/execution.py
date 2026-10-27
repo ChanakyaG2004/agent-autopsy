@@ -23,7 +23,6 @@ logger = logging.getLogger(__name__)
 
 
 def start_run(experiment_id: UUID, mode: str, session: Session, *, run_id: UUID | None = None, lease: Lease | None = None) -> AgentRun:
-    # Validate configuration before claiming the experiment or doing paid work.
     with session.begin():
         owner = lease.check(session) if lease else None
         experiment = session.scalar(select(Experiment).where(Experiment.id == experiment_id).with_for_update())
@@ -189,7 +188,6 @@ class _LeasedDriver:
     def decide(self, history):
         with self.session.begin():
             self.lease.check(self.session)
-        # No database transaction spans model I/O.
         return self.delegate.decide(history)
 
     def __getattr__(self, name):
