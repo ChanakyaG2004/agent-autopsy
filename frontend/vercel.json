@@ -1,0 +1,5 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": "nextjs",
+  "buildCommand": "AGENT_AUTOPSY_PUBLIC_DEMO=true npm run build"
+}

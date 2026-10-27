@@ -29,7 +29,7 @@ export function RecoveryPolicy({ evaluation, running, interrupted = false }: {
       <p>Checks recorded tool behavior and state. Final-response wording and model quality are not graded.</p>
       <dl className="evaluation-checks">
         {evaluation.checks.map((check) => <div key={check.name}>
-          <dt><strong>{evaluation.verdict === "not_applicable" ? "N/A" : check.passed ? "Pass" : "Fail"} · {labels[check.name] ?? check.name}</strong></dt>
+          <dt><strong>{evaluation.verdict === "not_applicable" ? "N/A" : evaluation.verdict === "not_evaluable" ? "Unavailable" : check.passed ? "Pass" : "Fail"} · {labels[check.name] ?? check.name}</strong></dt>
           <dd>{check.reason}</dd>
         </div>)}
       </dl>

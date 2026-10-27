@@ -10,6 +10,8 @@ A tool can commit a refund and then lose its response. A baseline agent stops wi
 
 The platform makes these distinctions visible through saved actions, state snapshots, independent grades, comparisons, and linked Phoenix traces.
 
+The [public recorded-demo guide](docs/public-demo.md) describes the free, static website. Visitors can compare nine actual scripted observations and inspect saved tool/evaluator evidence without running local services. Fresh executions, durable jobs, local-model inference, and Phoenix collection remain features of the full application below.
+
 - Three scenarios: normal execution, response lost after commit, and permission denial.
 - Explicit bounded agent loop; scripted controls and native local Ollama tool calling. OpenAI is optional.
 - Four deterministic evaluations: refund ledger, recovery trajectory, tool policy, and typed-report grounding against agent-visible evidence.
